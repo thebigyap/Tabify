@@ -57,6 +57,13 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 });
 
 function initializeExtension() {
+	// Make sure we use the large icon
+	const iconPath = "assets/images/blue_happy_128.png";
+
+	chrome.action.setIcon({ path: iconPath }, () => {
+		console.log(`[ICON]: Updated to ${iconPath}`);
+	});
+
 	// Add existing tabs to tabArr
 	chrome.tabs.query({}, function (existingTabs) {
 		existingTabs.forEach(function (tab) {
