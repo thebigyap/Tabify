@@ -1,6 +1,61 @@
 let runningCheck = false;
 var tabArr = [];
-var ignoredWebsites = [];
+
+/**
+ * BOLT OPTIMIZATION: Settings Cache
+ * Synchronous access to extension settings to avoid repeated asynchronous chrome.storage lookups.
+ */
+let settingsCache = {
+	ignoredWebsites: new Set(),
+	ignoreQueryStrings: false,
+	ignoreAnchorTags: false,
+	switchToOriginalTab: false,
+	extensionEnabled: false
+};
+
+// Update cache when storage changes
+chrome.storage.onChanged.addListener((changes, area) => {
+	if (area !== "sync") return;
+	for (let key in changes) {
+		if (Object.prototype.hasOwnProperty.call(settingsCache, key)) {
+			if (key === "ignoredWebsites") {
+				settingsCache.ignoredWebsites = new Set(Array.isArray(changes[key].newValue) ? changes[key].newValue : []);
+			} else {
+				settingsCache[key] = changes[key].newValue;
+			}
+			console.log(`[CACHE]: Updated ${key}`);
+
+			if (key === "extensionEnabled") {
+				const iconPath = settingsCache.extensionEnabled
+					? "assets/images/blue_happy_128.png"
+					: "assets/images/disabled_sad_128.png";
+
+				chrome.action.setIcon({ path: iconPath }, () => {
+					console.log(`[ICON]: Updated to ${iconPath}`);
+				});
+			}
+		}
+	}
+});
+
+async function loadSettings() {
+	return new Promise(resolve => {
+		chrome.storage.sync.get([
+			"ignoredWebsites",
+			"ignoreQueryStrings",
+			"ignoreAnchorTags",
+			"switchToOriginalTab",
+			"extensionEnabled"
+		], result => {
+			settingsCache.ignoredWebsites = new Set(Array.isArray(result.ignoredWebsites) ? result.ignoredWebsites : []);
+			settingsCache.ignoreQueryStrings = !!result.ignoreQueryStrings;
+			settingsCache.ignoreAnchorTags = !!result.ignoreAnchorTags;
+			settingsCache.switchToOriginalTab = !!result.switchToOriginalTab;
+			settingsCache.extensionEnabled = !!result.extensionEnabled;
+			resolve();
+		});
+	});
+}
 
 var tabCheck = function () {
 	console.log("Running tabCheck: checking all duplicates...");
@@ -8,35 +63,82 @@ var tabCheck = function () {
 };
 
 var tabsIgnored = function () {
-	console.log("Ignored Websites:", ignoredWebsites);
+	console.log("Ignored Websites:", settingsCache.ignoredWebsites);
 }
 
+/**
+ * BOLT OPTIMIZATION: O(n) Duplicate Check
+ * Instead of O(n^2) by calling checkForDuplicate for each tab, we do a single pass.
+ */
 async function checkAllDuplicates() {
 	if (runningCheck) return;
 	runningCheck = true;
-	console.log("Running sequential duplicate check...");
+	console.log("Running batch duplicate check...");
 
-	//const currentTabs = await chrome.tabs.query({});
-	//tabArr = currentTabs;
+	try {
+		const tabsToRemove = [];
+		const seenUrls = new Set();
+		const seenBaseUrlsQS = new Set();
+		const seenBaseUrlsAnchor = new Set();
 
-	//for (const tab of currentTabs) {
-	for (const tab of tabArr) {
-		await checkForDuplicate(tab, true);
-	}
-	runningCheck = false;
-}
+		// We iterate in reverse to keep the "oldest" tab (usually the one with lower index)
+		// actually tabs are added to tabArr in order of creation/detection.
+		// To match current behavior of "closing the new one and selecting the old one",
+		// we should probably keep the first one we encounter and mark subsequent ones as duplicates.
 
-function getSetting(setting) {
-	return new Promise(resolve => {
-		chrome.storage.sync.get(setting, result => {
-			if (chrome.runtime.lastError) {
-				console.error(`Error getting ${setting}:`, chrome.runtime.lastError);
-				resolve(undefined);
+		for (const tab of tabArr) {
+			if (!tab.url) continue;
+
+			// Skip NTP tabs
+			if (tab.url.includes("://newtab")) continue;
+
+			// Skip Bing search tabs
+			if (tab.url.includes("search?") && tab.url.includes("bing.com")) continue;
+
+			// Check if tab is ignored
+			if (settingsCache.ignoredWebsites.has(tab.url)) continue;
+
+			let isDuplicate = false;
+
+			// Exact match
+			if (seenUrls.has(tab.url)) {
+				isDuplicate = true;
 			} else {
-				resolve(result[setting]);
+				// Query-stripped match
+				if (settingsCache.ignoreQueryStrings) {
+					const baseUrl = tab.url.split("?")[0];
+					if (seenBaseUrlsQS.has(baseUrl)) {
+						isDuplicate = true;
+					}
+				}
+
+				// Anchor-stripped match
+				if (!isDuplicate && settingsCache.ignoreAnchorTags) {
+					const baseUrl = tab.url.split("#")[0];
+					if (seenBaseUrlsAnchor.has(baseUrl)) {
+						isDuplicate = true;
+					}
+				}
 			}
-		});
-	});
+
+			if (isDuplicate) {
+				tabsToRemove.push(tab.id);
+			} else {
+				seenUrls.add(tab.url);
+				if (settingsCache.ignoreQueryStrings) seenBaseUrlsQS.add(tab.url.split("?")[0]);
+				if (settingsCache.ignoreAnchorTags) seenBaseUrlsAnchor.add(tab.url.split("#")[0]);
+			}
+		}
+
+		if (tabsToRemove.length > 0) {
+			console.log(`Removing ${tabsToRemove.length} duplicate tabs...`);
+			chrome.tabs.remove(tabsToRemove);
+		}
+	} catch (error) {
+		console.error("Error in checkAllDuplicates:", error);
+	} finally {
+		runningCheck = false;
+	}
 }
 
 // LISTENER FOR COMMUNICATION WITH `popup.js`
@@ -45,20 +147,17 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 	if (act === "checkAllDuplicates") {
 		checkAllDuplicates();
 	}
-	if (act === "updateCache" && request.setting === "extensionEnabled") {
-		const iconPath = request.value
-			? "assets/images/blue_happy_128.png"
-			: "assets/images/disabled_sad_128.png";
-
-		chrome.action.setIcon({ path: iconPath }, () => {
-			console.log(`[ICON]: Updated to ${iconPath}`);
-		});
-	}
+	// Note: updateCache message is now handled by chrome.storage.onChanged
 });
 
-function initializeExtension() {
+async function initializeExtension() {
+	// Load settings into cache first
+	await loadSettings();
+
 	// Make sure we use the large icon
-	const iconPath = "assets/images/blue_happy_128.png";
+	const iconPath = settingsCache.extensionEnabled
+		? "assets/images/blue_happy_128.png"
+		: "assets/images/disabled_sad_128.png";
 
 	chrome.action.setIcon({ path: iconPath }, () => {
 		console.log(`[ICON]: Updated to ${iconPath}`);
@@ -66,100 +165,90 @@ function initializeExtension() {
 
 	// Add existing tabs to tabArr
 	chrome.tabs.query({}, function (existingTabs) {
-		existingTabs.forEach(function (tab) {
-			tabArr.push(tab);
-			console.log("Add tab", tab.id, tab);
-		});
+		tabArr = existingTabs; // Initialize tabArr with current tabs
+		console.log("Initialized tabArr with", tabArr.length, "tabs");
 	});
 
 	setTimeout(function () {
 		// Check for duplicate tabs in tabArr
-		checkAllDuplicates();
+		if (settingsCache.extensionEnabled) {
+			checkAllDuplicates();
+		}
 	}, 10000); // Wait a couple seconds to allow the browser to start up and load pages before activating the plugin
 
 	console.log("Extension Loaded.\ntabArr: ", tabArr);
 	return;
 }
 
-async function checkForDuplicate(tab, preventSwitch = false) {
-	if (runningCheck) return;
+/**
+ * BOLT OPTIMIZATION: Synchronous Check with Cache
+ * We now use settingsCache instead of asynchronous storage lookups.
+ */
+function checkForDuplicate(tab, preventSwitch = false) {
+	if (runningCheck || !tab.url) return;
 	runningCheck = true;
-	console.log("Checking for duplicate tab:", tab.id, tab);
+	console.log("Checking for duplicate tab:", tab.id, tab.url);
 
-	// Skip NTP tabs
-	if (tab.url.includes("://newtab")) {
-		console.log(tab, "Cannot remove NTP tab.");
+	try {
+		// Skip NTP tabs
+		if (tab.url.includes("://newtab")) {
+			console.log(tab, "Cannot remove NTP tab.");
+			return;
+		}
+
+		// Skip Bing search tabs
+		if (tab.url.includes("search?") && tab.url.includes("bing.com")) {
+			console.log(tab, "Ignoring bing search tab.");
+			return;
+		}
+
+		// Check if tab is ignored (using cache)
+		if (settingsCache.ignoredWebsites.has(tab.url)) {
+			console.log(tab.url, "is ignored, not checking for duplicates.");
+			return;
+		}
+
+		// Check for exact URL duplicates
+		let isDuplicate = tabArr.some(t => t.url === tab.url && t.id !== tab.id);
+		console.log("Exact match isDuplicate:", isDuplicate);
+
+		// Check for query-stripped duplicates
+		if (!isDuplicate && settingsCache.ignoreQueryStrings) {
+			const baseUrl = tab.url.split("?")[0];
+			isDuplicate = tabArr.some(t => t && t.url && t.url.split("?")[0] === baseUrl && t.id !== tab.id);
+			console.log("Query-stripped isDuplicate:", baseUrl, isDuplicate);
+		}
+
+		// Check for anchor-stripped duplicates
+		if (!isDuplicate && settingsCache.ignoreAnchorTags) {
+			const baseUrl = tab.url.split("#")[0];
+			isDuplicate = tabArr.some(t => t && t.url && t.url.split("#")[0] === baseUrl && t.id !== tab.id);
+			console.log("Anchor-stripped isDuplicate:", baseUrl, isDuplicate);
+		}
+
+		// Check for pending URL duplicates
+		const pendingURL = tab.pendingUrl !== undefined
+			? tabArr.some(t => t.url === tab.pendingUrl && t.id !== tab.id)
+			: false;
+
+		if (isDuplicate || pendingURL) {
+			chrome.tabs.remove(tab.id, function () {
+				const originalTab = tabArr.find(t => t.url === tab.url && t.id !== tab.id);
+
+				if (!originalTab || preventSwitch) return;
+
+				if (settingsCache.switchToOriginalTab) {
+					chrome.tabs.update(originalTab.id, { active: true }, function (updatedTab) {
+						console.log("Setting Active Tab:", updatedTab.id, updatedTab);
+					});
+				}
+
+				console.log("Closed duplicate tab:", tab.id, tab.url, "Dup of:", originalTab?.id, originalTab?.url);
+			});
+		}
+	} finally {
 		runningCheck = false;
-		return;
 	}
-
-	// Skip Bing search tabs
-	if (tab.url.includes("search?") && tab.url.includes("bing.com")) {
-		console.log(tab, "Ignoring bing search tab.");
-		runningCheck = false;
-		return;
-	}
-
-	// Load settings
-	const [
-		ignoredWebsites,
-		ignoreQueryStrings,
-		ignoreAnchorTags,
-		switchToOriginalTab
-	] = await Promise.all([
-		getSetting("ignoredWebsites").then(v => Array.isArray(v) ? v : []),
-		getSetting("ignoreQueryStrings").then(v => !!v),
-		getSetting("ignoreAnchorTags").then(v => !!v),
-		getSetting("switchToOriginalTab").then(v => !!v)
-	]);
-
-	// Check if tab is ignored
-	if (Array.isArray(ignoredWebsites) && ignoredWebsites.includes(tab.url)) {
-		console.log(tab.url, "is ignored, not checking for duplicates.");
-		runningCheck = false;
-		return;
-	}
-
-	// Check for exact URL duplicates
-	let isDuplicate = tabArr.some(t => t.url === tab.url && t.id !== tab.id);
-	console.log("Exact match isDuplicate:", isDuplicate);
-
-	// Check for query-stripped duplicates
-	if (!isDuplicate && ignoreQueryStrings) {
-		const baseUrl = tab.url.split("?")[0];
-		isDuplicate = tabArr.some(t => t.url.split("?")[0] === baseUrl && t.id !== tab.id);
-		console.log("Query-stripped isDuplicate:", baseUrl, isDuplicate);
-	}
-
-	// Check for anchor-stripped duplicates
-	if (!isDuplicate && ignoreAnchorTags) {
-		const baseUrl = tab.url.split("#")[0];
-		isDuplicate = tabArr.some(t => t.url.split("#")[0] === baseUrl && t.id !== tab.id);
-		console.log("Anchor-stripped isDuplicate:", baseUrl, isDuplicate);
-	}
-
-	// Check for pending URL duplicates
-	const pendingURL = tab.pendingUrl !== undefined
-		? tabArr.some(t => t.url === tab.pendingUrl && t.id !== tab.id)
-		: false;
-
-	if (isDuplicate || pendingURL) {
-		chrome.tabs.remove(tab.id, function () {
-			const originalTab = tabArr.find(t => t.url === tab.url && t.id !== tab.id);
-
-			if (!originalTab || preventSwitch) return;
-
-			if (switchToOriginalTab) {
-				chrome.tabs.update(originalTab.id, { active: true }, function (updatedTab) {
-					console.log("Setting Active Tab:", updatedTab.id, updatedTab);
-				});
-			}
-
-			console.log("Closed duplicate tab:", tab.id, tab, "Dup of:", originalTab?.id, originalTab);
-		});
-	}
-
-	runningCheck = false;
 }
 
 const MENU_ID = "tabify-toggle-ignore";
@@ -193,7 +282,7 @@ chrome.tabs.onCreated.addListener(function (newTab) {
 
 // UPDATE TAB LISTENER
 chrome.tabs.onUpdated.addListener(async function (tabID, changeInfo, updatedTab) {
-	const isEnabled = await getSetting("extensionEnabled").then(v => !!v);
+	const isEnabled = settingsCache.extensionEnabled;
 
 	// Ignore favIcon, title changes, and loading tabs
 	if (changeInfo.favIconUrl
