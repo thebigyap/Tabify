@@ -78,8 +78,8 @@ function render() {
 			<td class="title">${guessTitle(url)}</td>
 			<td class="url">${url}</td>
 			<td>
-				<button class="btn" data-open="${encodeURIComponent(url)}">Open</button>
-				<button class="btn danger" data-remove="${encodeURIComponent(url)}">Unignore</button>
+				<button class="btn" data-open="${encodeURIComponent(url)}" title="Open ${url}" aria-label="Open ${url}">Open</button>
+				<button class="btn danger" data-remove="${encodeURIComponent(url)}" title="Unignore ${url}" aria-label="Unignore ${url}">Unignore</button>
 			</td>
 		`;
 		rowsEl.appendChild(tr);
