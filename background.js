@@ -1,5 +1,5 @@
 let runningCheck = false;
-var tabArr = [];
+var tabsMap = new Map();
 
 /**
  * BOLT OPTIMIZATION: Settings Cache
@@ -81,12 +81,10 @@ async function checkAllDuplicates() {
 		const seenBaseUrlsQS = new Set();
 		const seenBaseUrlsAnchor = new Set();
 
-		// We iterate in reverse to keep the "oldest" tab (usually the one with lower index)
-		// actually tabs are added to tabArr in order of creation/detection.
 		// To match current behavior of "closing the new one and selecting the old one",
-		// we should probably keep the first one we encounter and mark subsequent ones as duplicates.
+		// we keep the first one we encounter and mark subsequent ones as duplicates.
 
-		for (const tab of tabArr) {
+		for (const tab of tabsMap.values()) {
 			if (!tab.url) continue;
 
 			// Skip NTP tabs
@@ -163,20 +161,23 @@ async function initializeExtension() {
 		console.log(`[ICON]: Updated to ${iconPath}`);
 	});
 
-	// Add existing tabs to tabArr
+	// Add existing tabs to tabsMap
 	chrome.tabs.query({}, function (existingTabs) {
-		tabArr = existingTabs; // Initialize tabArr with current tabs
-		console.log("Initialized tabArr with", tabArr.length, "tabs");
+		tabsMap.clear();
+		for (const tab of existingTabs) {
+			tabsMap.set(tab.id, tab);
+		}
+		console.log("Initialized tabsMap with", tabsMap.size, "tabs");
 	});
 
 	setTimeout(function () {
-		// Check for duplicate tabs in tabArr
+		// Check for duplicate tabs in tabsMap
 		if (settingsCache.extensionEnabled) {
 			checkAllDuplicates();
 		}
 	}, 10000); // Wait a couple seconds to allow the browser to start up and load pages before activating the plugin
 
-	console.log("Extension Loaded.\ntabArr: ", tabArr);
+	console.log("Extension Loaded.\ntabsMap: ", tabsMap);
 	return;
 }
 
@@ -208,33 +209,50 @@ function checkForDuplicate(tab, preventSwitch = false) {
 			return;
 		}
 
-		// Check for exact URL duplicates
-		let isDuplicate = tabArr.some(t => t.url === tab.url && t.id !== tab.id);
-		console.log("Exact match isDuplicate:", isDuplicate);
+		// Check for duplicates
+		let isDuplicate = false;
+		let originalTab = null;
 
-		// Check for query-stripped duplicates
-		if (!isDuplicate && settingsCache.ignoreQueryStrings) {
-			const baseUrl = tab.url.split("?")[0];
-			isDuplicate = tabArr.some(t => t && t.url && t.url.split("?")[0] === baseUrl && t.id !== tab.id);
-			console.log("Query-stripped isDuplicate:", baseUrl, isDuplicate);
+		for (const t of tabsMap.values()) {
+			if (t.id === tab.id) continue;
+
+			// Exact match
+			if (t.url === tab.url) {
+				isDuplicate = true;
+				originalTab = t;
+				break;
+			}
+
+			// Query-stripped match
+			if (settingsCache.ignoreQueryStrings) {
+				const baseUrl = tab.url.split("?")[0];
+				if (t.url && t.url.split("?")[0] === baseUrl) {
+					isDuplicate = true;
+					originalTab = t;
+					break;
+				}
+			}
+
+			// Anchor-stripped match
+			if (settingsCache.ignoreAnchorTags) {
+				const baseUrl = tab.url.split("#")[0];
+				if (t.url && t.url.split("#")[0] === baseUrl) {
+					isDuplicate = true;
+					originalTab = t;
+					break;
+				}
+			}
+
+			// Pending URL match
+			if (tab.pendingUrl !== undefined && t.url === tab.pendingUrl) {
+				isDuplicate = true;
+				originalTab = t;
+				break;
+			}
 		}
 
-		// Check for anchor-stripped duplicates
-		if (!isDuplicate && settingsCache.ignoreAnchorTags) {
-			const baseUrl = tab.url.split("#")[0];
-			isDuplicate = tabArr.some(t => t && t.url && t.url.split("#")[0] === baseUrl && t.id !== tab.id);
-			console.log("Anchor-stripped isDuplicate:", baseUrl, isDuplicate);
-		}
-
-		// Check for pending URL duplicates
-		const pendingURL = tab.pendingUrl !== undefined
-			? tabArr.some(t => t.url === tab.pendingUrl && t.id !== tab.id)
-			: false;
-
-		if (isDuplicate || pendingURL) {
+		if (isDuplicate) {
 			chrome.tabs.remove(tab.id, function () {
-				const originalTab = tabArr.find(t => t.url === tab.url && t.id !== tab.id);
-
 				if (!originalTab || preventSwitch) return;
 
 				if (settingsCache.switchToOriginalTab) {
@@ -276,7 +294,7 @@ chrome.runtime.onStartup.addListener(() => {
 
 // CREATE TAB LISTENER
 chrome.tabs.onCreated.addListener(function (newTab) {
-	tabArr.push(newTab);
+	tabsMap.set(newTab.id, newTab);
 	console.log("New tab", newTab.id);
 });
 
@@ -292,22 +310,18 @@ chrome.tabs.onUpdated.addListener(async function (tabID, changeInfo, updatedTab)
 
 	console.log("changeInfo:", changeInfo);
 
-	const tab = tabArr.findIndex(tab => tab.id === tabID);
-	if (changeInfo.status === "complete" && tab !== -1) {
-		tabArr[tab] = updatedTab;
+	if (changeInfo.status === "complete" && tabsMap.has(tabID)) {
+		tabsMap.set(tabID, updatedTab);
 		if (isEnabled)
-			checkForDuplicate(tabArr[tab]);
+			checkForDuplicate(updatedTab);
 	}
 });
 
 // REMOVE TAB LISTENER
 chrome.tabs.onRemoved.addListener(function (tabID) {
 	try {
-		// Find the index of the tab in the array
-		const index = tabArr.findIndex(tab => tab.id === tabID);
-		// Remove the tab from the array
-		if (index !== -1) {
-			tabArr.splice(index, 1);
+		// Remove the tab from the map
+		if (tabsMap.delete(tabID)) {
 			console.log("Removed tab", tabID);
 		}
 	}
