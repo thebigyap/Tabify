@@ -13,13 +13,23 @@ let settingsCache = {
 	extensionEnabled: false
 };
 
+function normalizeIgnoredWebsites(values) {
+	const next = new Set();
+	for (const value of Array.isArray(values) ? values : []) {
+		if (typeof value !== "string") continue;
+		const canonical = canonicalize(value);
+		next.add(canonical || value);
+	}
+	return Array.from(next);
+}
+
 // Update cache when storage changes
 chrome.storage.onChanged.addListener((changes, area) => {
 	if (area !== "sync") return;
 	for (let key in changes) {
 		if (Object.prototype.hasOwnProperty.call(settingsCache, key)) {
 			if (key === "ignoredWebsites") {
-				settingsCache.ignoredWebsites = new Set(Array.isArray(changes[key].newValue) ? changes[key].newValue : []);
+				settingsCache.ignoredWebsites = new Set(normalizeIgnoredWebsites(changes[key].newValue));
 			} else {
 				settingsCache[key] = changes[key].newValue;
 			}
@@ -46,12 +56,19 @@ async function loadSettings() {
 			"ignoreAnchorTags",
 			"switchToOriginalTab",
 			"extensionEnabled"
-		], result => {
-			settingsCache.ignoredWebsites = new Set(Array.isArray(result.ignoredWebsites) ? result.ignoredWebsites : []);
+		], async result => {
+			const normalizedIgnored = normalizeIgnoredWebsites(result.ignoredWebsites);
+			settingsCache.ignoredWebsites = new Set(normalizedIgnored);
 			settingsCache.ignoreQueryStrings = !!result.ignoreQueryStrings;
 			settingsCache.ignoreAnchorTags = !!result.ignoreAnchorTags;
 			settingsCache.switchToOriginalTab = !!result.switchToOriginalTab;
 			settingsCache.extensionEnabled = !!result.extensionEnabled;
+			const originalIgnored = Array.isArray(result.ignoredWebsites) ? result.ignoredWebsites : [];
+			const needsMigration = originalIgnored.length !== normalizedIgnored.length
+				|| originalIgnored.some((url, index) => normalizedIgnored[index] !== url);
+			if (needsMigration) {
+				await new Promise(saveResolve => chrome.storage.sync.set({ ignoredWebsites: normalizedIgnored }, saveResolve));
+			}
 			resolve();
 		});
 	});
@@ -76,10 +93,12 @@ async function checkAllDuplicates() {
 	console.log("Running batch duplicate check...");
 
 	try {
+		await ensureTabsMapInitialized();
 		const tabsToRemove = [];
-		const seenUrls = new Set();
-		const seenBaseUrlsQS = new Set();
-		const seenBaseUrlsAnchor = new Set();
+		const seenUrls = new Map();
+		const seenBaseUrlsQS = new Map();
+		const seenBaseUrlsAnchor = new Map();
+		let firstOriginalTabId = null;
 
 		// To match current behavior of "closing the new one and selecting the old one",
 		// we keep the first one we encounter and mark subsequent ones as duplicates.
@@ -94,19 +113,23 @@ async function checkAllDuplicates() {
 			if (tab.url.includes("search?") && tab.url.includes("bing.com")) continue;
 
 			// Check if tab is ignored
-			if (settingsCache.ignoredWebsites.has(tab.url)) continue;
+			const canonicalUrl = canonicalize(tab.url);
+			if (settingsCache.ignoredWebsites.has(tab.url) || (canonicalUrl && settingsCache.ignoredWebsites.has(canonicalUrl))) continue;
 
 			let isDuplicate = false;
+			let originalTabId = null;
 
 			// Exact match
 			if (seenUrls.has(tab.url)) {
 				isDuplicate = true;
+				originalTabId = seenUrls.get(tab.url);
 			} else {
 				// Query-stripped match
 				if (settingsCache.ignoreQueryStrings) {
 					const baseUrl = tab.url.split("?")[0];
 					if (seenBaseUrlsQS.has(baseUrl)) {
 						isDuplicate = true;
+						originalTabId = seenBaseUrlsQS.get(baseUrl);
 					}
 				}
 
@@ -115,22 +138,29 @@ async function checkAllDuplicates() {
 					const baseUrl = tab.url.split("#")[0];
 					if (seenBaseUrlsAnchor.has(baseUrl)) {
 						isDuplicate = true;
+						originalTabId = seenBaseUrlsAnchor.get(baseUrl);
 					}
 				}
 			}
 
 			if (isDuplicate) {
 				tabsToRemove.push(tab.id);
+				if (settingsCache.switchToOriginalTab && firstOriginalTabId === null && typeof originalTabId === "number") {
+					firstOriginalTabId = originalTabId;
+				}
 			} else {
-				seenUrls.add(tab.url);
-				if (settingsCache.ignoreQueryStrings) seenBaseUrlsQS.add(tab.url.split("?")[0]);
-				if (settingsCache.ignoreAnchorTags) seenBaseUrlsAnchor.add(tab.url.split("#")[0]);
+				seenUrls.set(tab.url, tab.id);
+				if (settingsCache.ignoreQueryStrings) seenBaseUrlsQS.set(tab.url.split("?")[0], tab.id);
+				if (settingsCache.ignoreAnchorTags) seenBaseUrlsAnchor.set(tab.url.split("#")[0], tab.id);
 			}
 		}
 
 		if (tabsToRemove.length > 0) {
 			console.log(`Removing ${tabsToRemove.length} duplicate tabs...`);
 			chrome.tabs.remove(tabsToRemove);
+			if (settingsCache.switchToOriginalTab && firstOriginalTabId !== null) {
+				chrome.tabs.update(firstOriginalTabId, { active: true }, () => void chrome.runtime.lastError);
+			}
 		}
 	} catch (error) {
 		console.error("Error in checkAllDuplicates:", error);
@@ -185,12 +215,13 @@ async function initializeExtension() {
  * BOLT OPTIMIZATION: Synchronous Check with Cache
  * We now use settingsCache instead of asynchronous storage lookups.
  */
-function checkForDuplicate(tab, preventSwitch = false) {
+async function checkForDuplicate(tab, preventSwitch = false) {
 	if (runningCheck || !tab.url) return;
 	runningCheck = true;
 	console.log("Checking for duplicate tab:", tab.id, tab.url);
 
 	try {
+		await ensureTabsMapInitialized();
 		// Skip NTP tabs
 		if (tab.url.includes("://newtab")) {
 			console.log(tab, "Cannot remove NTP tab.");
@@ -204,7 +235,8 @@ function checkForDuplicate(tab, preventSwitch = false) {
 		}
 
 		// Check if tab is ignored (using cache)
-		if (settingsCache.ignoredWebsites.has(tab.url)) {
+		const canonicalUrl = canonicalize(tab.url);
+		if (settingsCache.ignoredWebsites.has(tab.url) || (canonicalUrl && settingsCache.ignoredWebsites.has(canonicalUrl))) {
 			console.log(tab.url, "is ignored, not checking for duplicates.");
 			return;
 		}
@@ -271,6 +303,16 @@ function checkForDuplicate(tab, preventSwitch = false) {
 
 const MENU_ID = "tabify-toggle-ignore";
 
+function ensureContextMenu() {
+	chrome.contextMenus.removeAll(() => {
+		chrome.contextMenus.create({
+			id: MENU_ID,
+			title: "Ignore this site in Tabify",
+			contexts: ["page"]
+		}, () => void chrome.runtime.lastError);
+	});
+}
+
 chrome.runtime.onInstalled.addListener((reason) => {
 	// Create welcome page
 	if (reason === chrome.runtime.OnInstalledReason.INSTALL) {
@@ -279,16 +321,12 @@ chrome.runtime.onInstalled.addListener((reason) => {
 		});
 	}
 
-	chrome.contextMenus.create({
-		id: MENU_ID,
-		title: "Ignore this site in Tabify",
-		contexts: ["page"]
-	});
-
+	ensureContextMenu();
 	initializeExtension();
 });
 
 chrome.runtime.onStartup.addListener(() => {
+	ensureContextMenu();
 	initializeExtension();
 });
 
@@ -310,10 +348,11 @@ chrome.tabs.onUpdated.addListener(async function (tabID, changeInfo, updatedTab)
 
 	console.log("changeInfo:", changeInfo);
 
-	if (changeInfo.status === "complete" && tabsMap.has(tabID)) {
+	if (changeInfo.status === "complete") {
 		tabsMap.set(tabID, updatedTab);
-		if (isEnabled)
+		if (isEnabled) {
 			checkForDuplicate(updatedTab);
+		}
 	}
 });
 
@@ -353,21 +392,35 @@ function canonicalize(raw) {
 	}
 }
 
+function ensureTabsMapInitialized() {
+	if (tabsMap.size > 0) return Promise.resolve();
+	return new Promise(resolve => {
+		chrome.tabs.query({}, function (existingTabs) {
+			tabsMap.clear();
+			for (const tab of existingTabs) {
+				tabsMap.set(tab.id, tab);
+			}
+			resolve();
+		});
+	});
+}
+
 function getIgnored() {
 	return new Promise(resolve => {
 		chrome.storage.sync.get(["ignoredWebsites"], res =>
-			resolve(Array.isArray(res.ignoredWebsites) ? res.ignoredWebsites : [])
+			resolve(normalizeIgnoredWebsites(res.ignoredWebsites))
 		);
 	});
 }
 
 function setIgnored(next) {
 	return new Promise(resolve => {
-		chrome.storage.sync.set({ ignoredWebsites: next }, () => {
+		const normalized = normalizeIgnoredWebsites(next);
+		chrome.storage.sync.set({ ignoredWebsites: normalized }, () => {
 			// Optional broadcast, but silences "Receiving end does not exist"
 			try {
 				chrome.runtime.sendMessage(
-					{ action: "updateCache", setting: "ignoreWebsite", value: next },
+					{ action: "updateCache", setting: "ignoreWebsite", value: normalized },
 					() => void chrome.runtime.lastError // read lastError to suppress warning
 				);
 			} catch (_) { /* ignore */ }

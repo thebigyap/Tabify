@@ -14,6 +14,34 @@ function checkAllDuplicates() {
 	});
 }
 
+function canonicalize(raw) {
+	if (!raw) return null;
+	try {
+		const u = new URL(raw);
+		if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+		const isLocal = h => h === "localhost" || h.endsWith(".localhost");
+		const isIp = h => /^[0-9.]+$/.test(h) || h.includes(":");
+		let host = u.hostname.toLowerCase();
+		if (!host.includes(".") && !isLocal(host) && !isIp(host)) host += ".com";
+		const dotCount = (host.match(/\./g) || []).length;
+		if (!host.startsWith("www.") && dotCount === 1 && !isLocal(host) && !isIp(host)) host = "www." + host;
+		const scheme = (isLocal(host) || isIp(host)) ? "http" : "https";
+		return `${scheme}://${host}/`;
+	} catch {
+		return null;
+	}
+}
+
+function normalizeIgnoredWebsites(values) {
+	const next = new Set();
+	for (const value of Array.isArray(values) ? values : []) {
+		if (typeof value !== "string") continue;
+		const canonical = canonicalize(value);
+		next.add(canonical || value);
+	}
+	return Array.from(next);
+}
+
 document.addEventListener("DOMContentLoaded", function () {
 	const extensionEnableCheckbox = document.getElementById("extensionEnableCheckbox");
 	const stripCheckbox = document.getElementById("stripCheckbox");
@@ -23,37 +51,16 @@ document.addEventListener("DOMContentLoaded", function () {
 	const clearWebsitesButton = document.getElementById("clearWebsitesButton");
 	const manageWebsitesButton = document.getElementById("manageWebsitesButton");
 
-	// Load the saved settings when the popup is opened
-	chrome.storage.sync.get(["extensionEnabled"], function (result) {
-		if (result.extensionEnabled !== undefined) {
-			extensionEnableCheckbox.checked = result.extensionEnabled;
-		}
-	});
-	chrome.storage.sync.get(["ignoreQueryStrings"], function (result) {
-		if (result.ignoreQueryStrings !== undefined) {
-			stripCheckbox.checked = result.ignoreQueryStrings;
-		}
-	});
-	chrome.storage.sync.get(["ignoreAnchorTags"], function (result) {
-		if (result.ignoreAnchorTags !== undefined) {
-			anchorsCheckbox.checked = result.ignoreAnchorTags;
-		}
-	});
-	chrome.storage.sync.get(["switchToOriginalTab"], function (result) {
-		if (result.switchToOriginalTab !== undefined) {
-			switchToOriginalTabCheckbox.checked = result.switchToOriginalTab;
-		}
-	});
-	chrome.storage.sync.get(["ignoreWebsite"], function (result) {
-		if (result.ignoreWebsite !== undefined) {
-			ignoreWebsiteButton.enabled = result.ignoreWebsite;
-		}
-	});
-	chrome.storage.sync.get(["ignoredWebsites"], function (result) {
+	chrome.storage.sync.get(["extensionEnabled", "ignoreQueryStrings", "ignoreAnchorTags", "switchToOriginalTab", "ignoredWebsites"], function (result) {
+		extensionEnableCheckbox.checked = !!result.extensionEnabled;
+		stripCheckbox.checked = !!result.ignoreQueryStrings;
+		anchorsCheckbox.checked = !!result.ignoreAnchorTags;
+		switchToOriginalTabCheckbox.checked = !!result.switchToOriginalTab;
 		chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-			const currentUrl = tabs[0].url;
-			const ignoredWebsites = result.ignoredWebsites || [];
-			const index = ignoredWebsites.indexOf(currentUrl);
+			const currentUrl = tabs[0] && tabs[0].url ? tabs[0].url : "";
+			const site = canonicalize(currentUrl);
+			const ignoredWebsites = normalizeIgnoredWebsites(result.ignoredWebsites);
+			const index = site ? ignoredWebsites.indexOf(site) : -1;
 
 			if (index === -1) {
 				ignoreWebsiteButton.innerText = "Ignore Website";
@@ -102,12 +109,14 @@ document.addEventListener("DOMContentLoaded", function () {
 	ignoreWebsiteButton.addEventListener("click", function () {
 		const button = this;
 		chrome.storage.sync.get(["ignoredWebsites"], function (result) {
-			let ignoredWebsites = result.ignoredWebsites || [];
+			let ignoredWebsites = normalizeIgnoredWebsites(result.ignoredWebsites);
 			chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-				const currentUrl = tabs[0].url;
-				const index = ignoredWebsites.indexOf(currentUrl);
+				const currentUrl = tabs[0] && tabs[0].url ? tabs[0].url : "";
+				const site = canonicalize(currentUrl);
+				if (!site) return;
+				const index = ignoredWebsites.indexOf(site);
 				if (index === -1) {
-					ignoredWebsites.push(currentUrl);
+					ignoredWebsites.push(site);
 					button.innerText = "Unignore Website";
 					button.style.backgroundColor = "#ed3f54";
 				} else {
@@ -115,9 +124,10 @@ document.addEventListener("DOMContentLoaded", function () {
 					button.innerText = "Ignore Website";
 					button.style.backgroundColor = "";
 				}
-				chrome.storage.sync.set({ "ignoredWebsites": ignoredWebsites }, function () {
-					updateCache("ignoreWebsite", ignoredWebsites);
-					console.log("ignoredWebsites ->\n", ignoredWebsites.join(",\n"));
+				const next = Array.from(new Set(ignoredWebsites));
+				chrome.storage.sync.set({ "ignoredWebsites": next }, function () {
+					updateCache("ignoreWebsite", next);
+					console.log("ignoredWebsites ->\n", next.join(",\n"));
 				});
 			});
 		});

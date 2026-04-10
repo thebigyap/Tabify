@@ -17,7 +17,7 @@ Chrome
 Manual Installation
 
 1. Clone the repository or download the ZIP file.
-2. Open Chrome and go to `edge://extensions/`.
+2. Open Chrome and go to `chrome://extensions/`.
 3. Enable "Developer mode" in the top right corner.
 4. Click "Load unpacked" and select the extension folder.
 
