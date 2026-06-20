@@ -1,18 +1,169 @@
-* {
-	color: white;
+/* Welcome / onboarding layout. Shared components live in theme.css */
+
+.welcome {
+	max-width: 880px;
+	margin: 0 auto;
+	padding: 56px 20px 72px;
 }
 
-body {
-	background-color: #292929;
+/* --- Hero ---------------------------------------------------------------- */
+
+.hero {
+	text-align: center;
+	margin-bottom: 44px;
 }
 
-a {
-	color: #008B8B;
-	text-decoration: underline;
+.app-badge {
+	width: 84px;
+	height: 84px;
+	margin: 0 auto 18px;
+	border-radius: 22px;
+	overflow: hidden;
+	box-shadow: var(--shadow);
 }
 
+.app-badge img {
+	display: block;
+	width: 84px;
+	height: 84px;
+}
 
-a:hover {
-	color: #ed3f54;
-	text-decoration: underline;
+.hero-title {
+	font-size: clamp(2.6rem, 6vw, 3.6rem);
+	margin: 0;
+	line-height: 1.05;
+}
+
+.hero-tagline {
+	font-size: clamp(1.05rem, 2.4vw, 1.3rem);
+	color: var(--label-secondary);
+	margin: 10px 0 20px;
+}
+
+.status-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 16px;
+	border-radius: 999px;
+	background: rgba(52, 199, 89, 0.16);
+	color: var(--label);
+	font-size: 14px;
+	font-weight: 500;
+}
+
+.status-pill svg {
+	color: var(--green);
+}
+
+/* --- Features ------------------------------------------------------------ */
+
+.features {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 14px;
+	margin-bottom: 28px;
+}
+
+.feature {
+	padding: 22px;
+}
+
+.feature-icon {
+	width: 42px;
+	height: 42px;
+	border-radius: 12px;
+	display: grid;
+	place-items: center;
+	color: #fff;
+	margin-bottom: 14px;
+}
+
+.feature h3 {
+	margin: 0 0 6px;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.feature p {
+	margin: 0;
+	color: var(--label-secondary);
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+/* --- How it works -------------------------------------------------------- */
+
+.how {
+	padding: 26px;
+	margin-bottom: 28px;
+}
+
+.how h2 {
+	margin: 0 0 18px;
+	font-size: 18px;
+	font-weight: 600;
+}
+
+.steps {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	counter-reset: step;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.steps li {
+	display: flex;
+	gap: 14px;
+	align-items: flex-start;
+	color: var(--label-secondary);
+	font-size: 14.5px;
+	line-height: 1.45;
+}
+
+.steps li::before {
+	counter-increment: step;
+	content: counter(step);
+	flex: 0 0 26px;
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: var(--accent);
+	color: #fff;
+	font-weight: 600;
+	font-size: 13px;
+	display: grid;
+	place-items: center;
+}
+
+.steps strong {
+	color: var(--label);
+	font-weight: 600;
+}
+
+/* --- CTA & footer -------------------------------------------------------- */
+
+.cta {
+	display: flex;
+	gap: 10px;
+	justify-content: center;
+	flex-wrap: wrap;
+	margin-bottom: 28px;
+}
+
+.cta .btn {
+	text-decoration: none;
+}
+
+.welcome-footer {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	align-items: center;
+	text-align: center;
+	color: var(--label-tertiary);
+	font-size: 13px;
 }

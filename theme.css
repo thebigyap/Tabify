@@ -1,0 +1,273 @@
+/* ==========================================================================
+   Tabify — shared design system
+   A small, Apple-inspired token + component layer used by the popup, the
+   manage page, and the welcome screen. Adapts to light/dark automatically.
+   ========================================================================== */
+
+:root {
+	color-scheme: light dark;
+
+	/* Brand */
+	--brand-1: #0a84ff;
+	--brand-2: #5e5ce6;
+	--brand-3: #34c759;
+
+	/* Accents */
+	--accent: #007aff;
+	--accent-soft: rgba(0, 122, 255, 0.12);
+	--green: #34c759;
+	--red: #ff3b30;
+	--red-soft: rgba(255, 59, 48, 0.12);
+
+	/* Surfaces & text (light) */
+	--bg: #f2f2f7;
+	--bg-elevated: #ffffff;
+	--label: #1d1d1f;
+	--label-secondary: rgba(60, 60, 67, 0.6);
+	--label-tertiary: rgba(60, 60, 67, 0.32);
+	--separator: rgba(60, 60, 67, 0.16);
+	--fill: rgba(118, 118, 128, 0.12);
+	--switch-off: #e9e9ea;
+	--shadow: 0 8px 24px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
+
+	/* Shape & motion */
+	--radius-lg: 18px;
+	--radius: 14px;
+	--radius-sm: 10px;
+	--ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+	--font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+		Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--accent: #0a84ff;
+		--accent-soft: rgba(10, 132, 255, 0.20);
+		--green: #30d158;
+		--red: #ff453a;
+		--red-soft: rgba(255, 69, 58, 0.22);
+
+		--bg: #1c1c1e;
+		--bg-elevated: #2c2c2e;
+		--label: #ffffff;
+		--label-secondary: rgba(235, 235, 245, 0.6);
+		--label-tertiary: rgba(235, 235, 245, 0.32);
+		--separator: rgba(84, 84, 88, 0.6);
+		--fill: rgba(118, 118, 128, 0.24);
+		--switch-off: #39393d;
+		--shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+	}
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	font-family: var(--font);
+	color: var(--label);
+	background: var(--bg);
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+/* --- Brand wordmark ------------------------------------------------------ */
+
+.brand {
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	background: linear-gradient(100deg, var(--brand-1), var(--brand-2), var(--brand-3), var(--brand-1));
+	background-size: 300% auto;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	-webkit-text-fill-color: transparent;
+	animation: brandShift 8s linear infinite;
+}
+
+@keyframes brandShift {
+	to { background-position: 300% center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.brand { animation: none; }
+}
+
+/* --- Cards & grouped lists ----------------------------------------------- */
+
+.card {
+	background: var(--bg-elevated);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow);
+}
+
+.group {
+	background: var(--bg-elevated);
+	border-radius: var(--radius);
+	overflow: hidden;
+}
+
+.group-title {
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--label-secondary);
+	margin: 0 0 8px 14px;
+}
+
+.row {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 11px 14px;
+	min-height: 48px;
+}
+
+.row:not(:last-child)::after {
+	content: "";
+	position: absolute;
+	left: var(--row-inset, 14px);
+	right: 0;
+	bottom: 0;
+	height: 1px;
+	background: var(--separator);
+}
+
+.row-icon {
+	flex: 0 0 28px;
+	width: 28px;
+	height: 28px;
+	display: grid;
+	place-items: center;
+	border-radius: 8px;
+	color: #fff;
+}
+
+.row-text {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.row-title {
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1.3;
+}
+
+.row-subtitle {
+	font-size: 12px;
+	color: var(--label-secondary);
+	line-height: 1.35;
+	margin-top: 2px;
+}
+
+/* Rows that begin with an icon get a deeper separator inset to align text. */
+.row.has-icon { --row-inset: 54px; }
+
+/* --- iOS-style toggle ---------------------------------------------------- */
+
+.switch {
+	appearance: none;
+	-webkit-appearance: none;
+	flex: 0 0 auto;
+	position: relative;
+	width: 46px;
+	height: 28px;
+	margin: 0;
+	border-radius: 999px;
+	background: var(--switch-off);
+	cursor: pointer;
+	transition: background 0.25s var(--ease);
+}
+
+.switch::before {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
+	transition: transform 0.25s var(--ease);
+}
+
+.switch:checked {
+	background: var(--green);
+}
+
+.switch:checked::before {
+	transform: translateX(18px);
+}
+
+.switch:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.switch:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* --- Buttons ------------------------------------------------------------- */
+
+.btn {
+	appearance: none;
+	border: none;
+	font-family: inherit;
+	font-size: 14px;
+	font-weight: 600;
+	padding: 11px 16px;
+	border-radius: 12px;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	color: var(--accent);
+	background: transparent;
+	transition: filter 0.15s ease, transform 0.06s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+.btn:hover:not(:disabled) { filter: brightness(1.06); }
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-tinted { background: var(--accent-soft); color: var(--accent); }
+.btn-destructive { background: var(--red-soft); color: var(--red); }
+.btn-block { width: 100%; }
+
+/* --- Text field ---------------------------------------------------------- */
+
+.field {
+	width: 100%;
+	font: inherit;
+	font-size: 15px;
+	color: var(--label);
+	background: var(--fill);
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	padding: 10px 12px;
+	transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.field::placeholder { color: var(--label-tertiary); }
+
+.field:focus {
+	outline: none;
+	border-color: var(--accent);
+	background: var(--bg-elevated);
+}
+
+/* --- Utilities ----------------------------------------------------------- */
+
+.muted { color: var(--label-secondary); }
+.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

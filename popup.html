@@ -5,67 +5,162 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Tabify</title>
+	<link rel="stylesheet" href="theme.css">
 	<link rel="stylesheet" href="popup.css">
 </head>
 
-<body class="popup-container" style="text-align: center;">
+<body>
+	<main class="popup">
+		<header class="pop-header">
+			<div class="pop-brand">
+				<span class="brand pop-wordmark">Tabify</span>
+				<span class="pop-tagline">One tab per page</span>
+			</div>
+			<div class="pop-links">
+				<a class="icon-btn" href="https://buymeacoffee.com/bigyap" target="_blank" rel="noopener noreferrer"
+					title="Buy me a coffee" aria-label="Buy me a coffee">
+					<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round">
+						<path d="M5 9h12v5a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z" />
+						<path d="M17 10h2a2 2 0 0 1 0 4h-2" />
+						<path d="M8 3c0 1-1 1.4-1 2.4M11.5 3c0 1-1 1.4-1 2.4" />
+					</svg>
+				</a>
+				<a class="icon-btn" href="https://github.com/thebigyap/Tabify" target="_blank"
+					rel="noopener noreferrer" title="Star on GitHub" aria-label="Star on GitHub">
+					<svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor">
+						<path
+							d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+					</svg>
+				</a>
+			</div>
+		</header>
 
-	<h1>
-		<span class="rainbow-text"
-			style="font-size: 36px; font-family: Arial, Helvetica, sans-serif">Tabify</span>
-	</h1>
+		<!-- Master switch -->
+		<section class="card">
+			<label class="row has-icon" for="extensionEnableCheckbox">
+				<span class="row-icon" id="masterIcon">
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round">
+						<path d="M12 3v9" />
+						<path d="M6.4 6.4a8 8 0 1 0 11.2 0" />
+					</svg>
+				</span>
+				<span class="row-text">
+					<span class="row-title">Tabify</span>
+					<span class="row-subtitle" id="masterStatus">Off · duplicates are allowed</span>
+				</span>
+				<input type="checkbox" class="switch" id="extensionEnableCheckbox" aria-label="Enable Tabify">
+			</label>
+		</section>
 
-	<div style="margin: 0 auto; width: 72px; margin-top: 10px;">
-		<a href="https://buymeacoffee.com/bigyap" target="_blank"
-			rel="noopener noreferrer" title="Buy me a coffee!"
-			style="display: inline-block; width: 32px; height: 32px; border-radius: 8px; overflow: hidden; padding-bottom: 8px;">
-			<img src="assets/images/coffee.png" alt="Buy me a coffee!"
-				width="32" height="32"
-				style="display: block; border-radius: 8px;">
-		</a>
-		<a href="https://github.com/WillMartin03/Tabify" target="_blank"
-			rel="noopener noreferrer" title="Star on GitHub"
-			style="display: inline-block; width: 32px; height: 32px; border-radius: 8px; overflow: hidden; padding-bottom: 8px;">
-			<img src="assets/images/github.png" alt="Star on GitHub" width="32"
-				height="32" style="display: block; border-radius: 8px;">
-		</a>
-	</div>
+		<!-- Current site -->
+		<section class="group" id="siteGroup">
+			<label class="row has-icon" for="ignoreSiteToggle" id="siteRow">
+				<span class="row-icon" id="siteIcon" style="background: var(--accent);">
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round">
+						<circle cx="12" cy="12" r="9" />
+						<path d="M3 12h18" />
+						<path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18" />
+					</svg>
+				</span>
+				<span class="row-text">
+					<span class="row-title truncate" id="siteHost">This site</span>
+					<span class="row-subtitle" id="siteStatus">Loading…</span>
+				</span>
+				<input type="checkbox" class="switch" id="ignoreSiteToggle" aria-label="Ignore this site">
+			</label>
+		</section>
 
-	<div class="checkbox-container">
-		<label for="extensionEnableCheckbox"><strong>Extension Enabled:</strong></label>
-		<input type="checkbox" id="extensionEnableCheckbox"
-			class="toggle-checkbox">
-	</div>
+		<!-- Matching options -->
+		<section class="settings-block" id="matchBlock">
+			<h2 class="group-title">Treat as duplicates</h2>
+			<div class="group">
+				<label class="row has-icon" for="stripCheckbox">
+					<span class="row-icon" style="background: #af52de;">
+						<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+							stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M3 5h18l-7 8v5l-4-2v-3z" />
+						</svg>
+					</span>
+					<span class="row-text">
+						<span class="row-title">Ignore query parameters</span>
+						<span class="row-subtitle">Match links that differ only after “?”</span>
+					</span>
+					<input type="checkbox" class="switch" id="stripCheckbox">
+				</label>
+				<label class="row has-icon" for="anchorsCheckbox">
+					<span class="row-icon" style="background: #5856d6;">
+						<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+							stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M9 4 7 20M17 4l-2 16M5 9h15M4 15h15" />
+						</svg>
+					</span>
+					<span class="row-text">
+						<span class="row-title">Ignore anchors</span>
+						<span class="row-subtitle">Match links that differ only after “#”</span>
+					</span>
+					<input type="checkbox" class="switch" id="anchorsCheckbox">
+				</label>
+			</div>
+		</section>
 
-	<div class="checkbox-container">
-		<label for="stripCheckbox"><strong>Ignore Query Parameters:</strong></label>
-		<input type="checkbox" id="stripCheckbox" class="toggle-checkbox">
-	</div>
+		<!-- Behavior -->
+		<section class="settings-block" id="behaviorBlock">
+			<h2 class="group-title">When a duplicate is closed</h2>
+			<div class="group">
+				<label class="row has-icon" for="switchToOriginalTabCheckbox">
+					<span class="row-icon" style="background: #ff9500;">
+						<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+							stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M9 14 4 9l5-5" />
+							<path d="M4 9h11a5 5 0 0 1 0 10h-3" />
+						</svg>
+					</span>
+					<span class="row-text">
+						<span class="row-title">Switch to the original tab</span>
+						<span class="row-subtitle">Jump to the tab you already had open</span>
+					</span>
+					<input type="checkbox" class="switch" id="switchToOriginalTabCheckbox">
+				</label>
+			</div>
+		</section>
 
-	<div class="checkbox-container">
-		<label for="anchorsCheckbox"><strong>Ignore Anchors:</strong></label>
-		<input type="checkbox" id="anchorsCheckbox" class="toggle-checkbox">
-	</div>
+		<!-- Excluded sites -->
+		<section class="group">
+			<button class="row has-icon row-button" id="manageWebsitesButton">
+				<span class="row-icon" style="background: #8e8e93;">
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round">
+						<path d="M8 6h12M8 12h12M8 18h12" />
+						<circle cx="3.6" cy="6" r="1.1" fill="currentColor" stroke="none" />
+						<circle cx="3.6" cy="12" r="1.1" fill="currentColor" stroke="none" />
+						<circle cx="3.6" cy="18" r="1.1" fill="currentColor" stroke="none" />
+					</svg>
+				</span>
+				<span class="row-text">
+					<span class="row-title">Excluded sites</span>
+					<span class="row-subtitle" id="excludedSubtitle">Sites Tabify leaves alone</span>
+				</span>
+				<span class="row-trailing">
+					<span class="count-badge" id="excludedCount">0</span>
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+						stroke-linecap="round" stroke-linejoin="round">
+						<path d="m9 6 6 6-6 6" />
+					</svg>
+				</span>
+			</button>
+		</section>
 
-	<div class="checkbox-container">
-		<label for="switchToOriginalTabCheckbox"><strong>Switch to original tab:</strong></label>
-		<input type="checkbox" id="switchToOriginalTabCheckbox"
-			class="toggle-checkbox">
-	</div>
-
-	<div class="checkbox-container">
-		<button id="ignoreWebsiteButton">Loading...</button>
-		<button id="clearWebsitesButton">Clear Excluded Websites</button>
-		<button id="manageWebsitesButton">Manage Excluded
-			Websites</button>
-	</div>
-
-	<div>
-		<p>NOTE: Changing settings will check all tabs with new settings
-			<strong>immediately.</strong>
-		</p>
-	</div>
+		<footer class="pop-footer">
+			<span>Changes apply instantly</span>
+			<span aria-hidden="true">·</span>
+			<span id="versionLabel"></span>
+		</footer>
+	</main>
 
 	<script src="popup.js"></script>
 </body>
+
 </html>

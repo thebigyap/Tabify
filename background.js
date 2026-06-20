@@ -1,17 +1,47 @@
-let runningCheck = false;
-var tabsMap = new Map();
-
 /**
- * BOLT OPTIMIZATION: Settings Cache
- * Synchronous access to extension settings to avoid repeated asynchronous chrome.storage lookups.
+ * Tabify — background service worker
+ *
+ * Keeps a single tab per page by detecting duplicates and closing the newest one
+ * (optionally jumping to the original). Designed for Manifest V3, where the
+ * service worker is torn down and restarted on demand, so all state is rebuilt
+ * lazily and every event waits for settings to be ready before acting.
  */
-let settingsCache = {
+
+const STORAGE_KEYS = [
+	"ignoredWebsites",
+	"ignoreQueryStrings",
+	"ignoreAnchorTags",
+	"switchToOriginalTab",
+	"extensionEnabled",
+];
+
+const ICON_ENABLED = "assets/images/blue_happy_128.png";
+const ICON_DISABLED = "assets/images/disabled_sad_128.png";
+
+const MENU_IGNORE = "tabify-toggle-ignore";
+const MENU_CLOSE_DUPES = "tabify-close-duplicates";
+
+/** In-memory mirror of every open tab, keyed by tab id. Rebuilt on demand. */
+const tabsMap = new Map();
+
+/** Live, synchronous view of settings. ignoredWebsites is a Set of origins. */
+const settings = {
 	ignoredWebsites: new Set(),
 	ignoreQueryStrings: false,
 	ignoreAnchorTags: false,
 	switchToOriginalTab: false,
-	extensionEnabled: false
+	extensionEnabled: false,
 };
+
+/* --------------------------------------------------------------------------
+ * Settings
+ *
+ * In MV3 the worker can be killed at any time and restarted by an event. The
+ * old code only loaded settings on install/startup, so an event-driven restart
+ * left `extensionEnabled` stuck at its default (false) and silently disabled
+ * the extension. We kick off a load at top level (runs on every wake) and have
+ * every handler await it before reading `settings`.
+ * ------------------------------------------------------------------------ */
 
 function normalizeIgnoredWebsites(values) {
 	const next = new Set();
@@ -23,353 +53,65 @@ function normalizeIgnoredWebsites(values) {
 	return Array.from(next);
 }
 
-// Update cache when storage changes
+async function loadSettings() {
+	const result = await chrome.storage.sync.get(STORAGE_KEYS);
+
+	const normalizedIgnored = normalizeIgnoredWebsites(result.ignoredWebsites);
+	settings.ignoredWebsites = new Set(normalizedIgnored);
+	settings.ignoreQueryStrings = !!result.ignoreQueryStrings;
+	settings.ignoreAnchorTags = !!result.ignoreAnchorTags;
+	settings.switchToOriginalTab = !!result.switchToOriginalTab;
+	settings.extensionEnabled = !!result.extensionEnabled;
+
+	// One-time migration: rewrite any legacy/loose entries as canonical origins.
+	const original = Array.isArray(result.ignoredWebsites) ? result.ignoredWebsites : [];
+	const changed = original.length !== normalizedIgnored.length
+		|| original.some((url, i) => normalizedIgnored[i] !== url);
+	if (changed) {
+		await chrome.storage.sync.set({ ignoredWebsites: normalizedIgnored });
+	}
+
+	updateIcon();
+}
+
+// Runs on every service-worker wake, not just install/startup.
+let settingsReady = loadSettings();
+
 chrome.storage.onChanged.addListener((changes, area) => {
 	if (area !== "sync") return;
-	for (let key in changes) {
-		if (Object.prototype.hasOwnProperty.call(settingsCache, key)) {
-			if (key === "ignoredWebsites") {
-				settingsCache.ignoredWebsites = new Set(normalizeIgnoredWebsites(changes[key].newValue));
-			} else {
-				settingsCache[key] = changes[key].newValue;
-			}
-			console.log(`[CACHE]: Updated ${key}`);
 
-			if (key === "extensionEnabled") {
-				const iconPath = settingsCache.extensionEnabled
-					? "assets/images/blue_happy_128.png"
-					: "assets/images/disabled_sad_128.png";
-
-				chrome.action.setIcon({ path: iconPath }, () => {
-					console.log(`[ICON]: Updated to ${iconPath}`);
-				});
-			}
+	let touchedMatching = false;
+	for (const key in changes) {
+		if (key === "ignoredWebsites") {
+			settings.ignoredWebsites = new Set(normalizeIgnoredWebsites(changes[key].newValue));
+			touchedMatching = true;
+		} else if (key === "extensionEnabled") {
+			settings.extensionEnabled = !!changes[key].newValue;
+			updateIcon();
+			touchedMatching = true;
+		} else if (key === "ignoreQueryStrings" || key === "ignoreAnchorTags") {
+			settings[key] = !!changes[key].newValue;
+			touchedMatching = true;
+		} else if (key === "switchToOriginalTab") {
+			settings.switchToOriginalTab = !!changes[key].newValue;
 		}
 	}
+
+	// Any change that affects what counts as a duplicate should re-scan
+	// immediately so the popup's promise of "applies right away" holds true.
+	if (touchedMatching && settings.extensionEnabled) scheduleScan();
 });
 
-async function loadSettings() {
-	return new Promise(resolve => {
-		chrome.storage.sync.get([
-			"ignoredWebsites",
-			"ignoreQueryStrings",
-			"ignoreAnchorTags",
-			"switchToOriginalTab",
-			"extensionEnabled"
-		], async result => {
-			const normalizedIgnored = normalizeIgnoredWebsites(result.ignoredWebsites);
-			settingsCache.ignoredWebsites = new Set(normalizedIgnored);
-			settingsCache.ignoreQueryStrings = !!result.ignoreQueryStrings;
-			settingsCache.ignoreAnchorTags = !!result.ignoreAnchorTags;
-			settingsCache.switchToOriginalTab = !!result.switchToOriginalTab;
-			settingsCache.extensionEnabled = !!result.extensionEnabled;
-			const originalIgnored = Array.isArray(result.ignoredWebsites) ? result.ignoredWebsites : [];
-			const needsMigration = originalIgnored.length !== normalizedIgnored.length
-				|| originalIgnored.some((url, index) => normalizedIgnored[index] !== url);
-			if (needsMigration) {
-				await new Promise(saveResolve => chrome.storage.sync.set({ ignoredWebsites: normalizedIgnored }, saveResolve));
-			}
-			resolve();
-		});
-	});
+function updateIcon() {
+	const path = settings.extensionEnabled ? ICON_ENABLED : ICON_DISABLED;
+	chrome.action.setIcon({ path }, () => void chrome.runtime.lastError);
 }
 
-var tabCheck = function () {
-	console.log("Running tabCheck: checking all duplicates...");
-	checkAllDuplicates();
-};
+/* --------------------------------------------------------------------------
+ * URL helpers
+ * ------------------------------------------------------------------------ */
 
-var tabsIgnored = function () {
-	console.log("Ignored Websites:", settingsCache.ignoredWebsites);
-}
-
-/**
- * BOLT OPTIMIZATION: O(n) Duplicate Check
- * Instead of O(n^2) by calling checkForDuplicate for each tab, we do a single pass.
- */
-async function checkAllDuplicates() {
-	if (runningCheck) return;
-	runningCheck = true;
-	console.log("Running batch duplicate check...");
-
-	try {
-		await ensureTabsMapInitialized();
-		const tabsToRemove = [];
-		const seenUrls = new Map();
-		const seenBaseUrlsQS = new Map();
-		const seenBaseUrlsAnchor = new Map();
-		let firstOriginalTabId = null;
-
-		// To match current behavior of "closing the new one and selecting the old one",
-		// we keep the first one we encounter and mark subsequent ones as duplicates.
-
-		for (const tab of tabsMap.values()) {
-			if (!tab.url) continue;
-
-			// Skip NTP tabs
-			if (tab.url.includes("://newtab")) continue;
-
-			// Skip Bing search tabs
-			if (tab.url.includes("search?") && tab.url.includes("bing.com")) continue;
-
-			// Check if tab is ignored
-			const canonicalUrl = canonicalize(tab.url);
-			if (settingsCache.ignoredWebsites.has(tab.url) || (canonicalUrl && settingsCache.ignoredWebsites.has(canonicalUrl))) continue;
-
-			let isDuplicate = false;
-			let originalTabId = null;
-
-			// Exact match
-			if (seenUrls.has(tab.url)) {
-				isDuplicate = true;
-				originalTabId = seenUrls.get(tab.url);
-			} else {
-				// Query-stripped match
-				if (settingsCache.ignoreQueryStrings) {
-					const baseUrl = tab.url.split("?")[0];
-					if (seenBaseUrlsQS.has(baseUrl)) {
-						isDuplicate = true;
-						originalTabId = seenBaseUrlsQS.get(baseUrl);
-					}
-				}
-
-				// Anchor-stripped match
-				if (!isDuplicate && settingsCache.ignoreAnchorTags) {
-					const baseUrl = tab.url.split("#")[0];
-					if (seenBaseUrlsAnchor.has(baseUrl)) {
-						isDuplicate = true;
-						originalTabId = seenBaseUrlsAnchor.get(baseUrl);
-					}
-				}
-			}
-
-			if (isDuplicate) {
-				tabsToRemove.push(tab.id);
-				if (settingsCache.switchToOriginalTab && firstOriginalTabId === null && typeof originalTabId === "number") {
-					firstOriginalTabId = originalTabId;
-				}
-			} else {
-				seenUrls.set(tab.url, tab.id);
-				if (settingsCache.ignoreQueryStrings) seenBaseUrlsQS.set(tab.url.split("?")[0], tab.id);
-				if (settingsCache.ignoreAnchorTags) seenBaseUrlsAnchor.set(tab.url.split("#")[0], tab.id);
-			}
-		}
-
-		if (tabsToRemove.length > 0) {
-			console.log(`Removing ${tabsToRemove.length} duplicate tabs...`);
-			chrome.tabs.remove(tabsToRemove);
-			if (settingsCache.switchToOriginalTab && firstOriginalTabId !== null) {
-				chrome.tabs.update(firstOriginalTabId, { active: true }, () => void chrome.runtime.lastError);
-			}
-		}
-	} catch (error) {
-		console.error("Error in checkAllDuplicates:", error);
-	} finally {
-		runningCheck = false;
-	}
-}
-
-// LISTENER FOR COMMUNICATION WITH `popup.js`
-chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
-	const act = request.action;
-	if (act === "checkAllDuplicates") {
-		checkAllDuplicates();
-	}
-	// Note: updateCache message is now handled by chrome.storage.onChanged
-});
-
-async function initializeExtension() {
-	// Load settings into cache first
-	await loadSettings();
-
-	// Make sure we use the large icon
-	const iconPath = settingsCache.extensionEnabled
-		? "assets/images/blue_happy_128.png"
-		: "assets/images/disabled_sad_128.png";
-
-	chrome.action.setIcon({ path: iconPath }, () => {
-		console.log(`[ICON]: Updated to ${iconPath}`);
-	});
-
-	// Add existing tabs to tabsMap
-	chrome.tabs.query({}, function (existingTabs) {
-		tabsMap.clear();
-		for (const tab of existingTabs) {
-			tabsMap.set(tab.id, tab);
-		}
-		console.log("Initialized tabsMap with", tabsMap.size, "tabs");
-	});
-
-	setTimeout(function () {
-		// Check for duplicate tabs in tabsMap
-		if (settingsCache.extensionEnabled) {
-			checkAllDuplicates();
-		}
-	}, 10000); // Wait a couple seconds to allow the browser to start up and load pages before activating the plugin
-
-	console.log("Extension Loaded.\ntabsMap: ", tabsMap);
-	return;
-}
-
-/**
- * BOLT OPTIMIZATION: Synchronous Check with Cache
- * We now use settingsCache instead of asynchronous storage lookups.
- */
-async function checkForDuplicate(tab, preventSwitch = false) {
-	if (runningCheck || !tab.url) return;
-	runningCheck = true;
-	console.log("Checking for duplicate tab:", tab.id, tab.url);
-
-	try {
-		await ensureTabsMapInitialized();
-		// Skip NTP tabs
-		if (tab.url.includes("://newtab")) {
-			console.log(tab, "Cannot remove NTP tab.");
-			return;
-		}
-
-		// Skip Bing search tabs
-		if (tab.url.includes("search?") && tab.url.includes("bing.com")) {
-			console.log(tab, "Ignoring bing search tab.");
-			return;
-		}
-
-		// Check if tab is ignored (using cache)
-		const canonicalUrl = canonicalize(tab.url);
-		if (settingsCache.ignoredWebsites.has(tab.url) || (canonicalUrl && settingsCache.ignoredWebsites.has(canonicalUrl))) {
-			console.log(tab.url, "is ignored, not checking for duplicates.");
-			return;
-		}
-
-		// Check for duplicates
-		let isDuplicate = false;
-		let originalTab = null;
-
-		for (const t of tabsMap.values()) {
-			if (t.id === tab.id) continue;
-
-			// Exact match
-			if (t.url === tab.url) {
-				isDuplicate = true;
-				originalTab = t;
-				break;
-			}
-
-			// Query-stripped match
-			if (settingsCache.ignoreQueryStrings) {
-				const baseUrl = tab.url.split("?")[0];
-				if (t.url && t.url.split("?")[0] === baseUrl) {
-					isDuplicate = true;
-					originalTab = t;
-					break;
-				}
-			}
-
-			// Anchor-stripped match
-			if (settingsCache.ignoreAnchorTags) {
-				const baseUrl = tab.url.split("#")[0];
-				if (t.url && t.url.split("#")[0] === baseUrl) {
-					isDuplicate = true;
-					originalTab = t;
-					break;
-				}
-			}
-
-			// Pending URL match
-			if (tab.pendingUrl !== undefined && t.url === tab.pendingUrl) {
-				isDuplicate = true;
-				originalTab = t;
-				break;
-			}
-		}
-
-		if (isDuplicate) {
-			chrome.tabs.remove(tab.id, function () {
-				if (!originalTab || preventSwitch) return;
-
-				if (settingsCache.switchToOriginalTab) {
-					chrome.tabs.update(originalTab.id, { active: true }, function (updatedTab) {
-						console.log("Setting Active Tab:", updatedTab.id, updatedTab);
-					});
-				}
-
-				console.log("Closed duplicate tab:", tab.id, tab.url, "Dup of:", originalTab?.id, originalTab?.url);
-			});
-		}
-	} finally {
-		runningCheck = false;
-	}
-}
-
-const MENU_ID = "tabify-toggle-ignore";
-
-function ensureContextMenu() {
-	chrome.contextMenus.removeAll(() => {
-		chrome.contextMenus.create({
-			id: MENU_ID,
-			title: "Ignore this site in Tabify",
-			contexts: ["page"]
-		}, () => void chrome.runtime.lastError);
-	});
-}
-
-chrome.runtime.onInstalled.addListener((reason) => {
-	// Create welcome page
-	if (reason === chrome.runtime.OnInstalledReason.INSTALL) {
-		chrome.tabs.create({
-			url: "welcome.html"
-		});
-	}
-
-	ensureContextMenu();
-	initializeExtension();
-});
-
-chrome.runtime.onStartup.addListener(() => {
-	ensureContextMenu();
-	initializeExtension();
-});
-
-// CREATE TAB LISTENER
-chrome.tabs.onCreated.addListener(function (newTab) {
-	tabsMap.set(newTab.id, newTab);
-	console.log("New tab", newTab.id);
-});
-
-// UPDATE TAB LISTENER
-chrome.tabs.onUpdated.addListener(async function (tabID, changeInfo, updatedTab) {
-	const isEnabled = settingsCache.extensionEnabled;
-
-	// Ignore favIcon, title changes, and loading tabs
-	if (changeInfo.favIconUrl
-		|| changeInfo.title
-		|| (changeInfo.status && changeInfo.status === "loading"))
-		return;
-
-	console.log("changeInfo:", changeInfo);
-
-	if (changeInfo.status === "complete") {
-		tabsMap.set(tabID, updatedTab);
-		if (isEnabled) {
-			checkForDuplicate(updatedTab);
-		}
-	}
-});
-
-// REMOVE TAB LISTENER
-chrome.tabs.onRemoved.addListener(function (tabID) {
-	try {
-		// Remove the tab from the map
-		if (tabsMap.delete(tabID)) {
-			console.log("Removed tab", tabID);
-		}
-	}
-	catch (error) {
-		console.log("ERROR:", error);
-	}
-});
-
-// Canonicalize a page URL I.E. https://www.example.com/
+// Canonicalize a page URL to its origin, e.g. https://www.example.com/
 function canonicalize(raw) {
 	if (!raw) return null;
 	try {
@@ -392,101 +134,299 @@ function canonicalize(raw) {
 	}
 }
 
-function ensureTabsMapInitialized() {
-	if (tabsMap.size > 0) return Promise.resolve();
+const stripQuery = url => url.split("?")[0];
+const stripAnchor = url => url.split("#")[0];
+
+// Pages we never touch: new-tab pages and Bing's search results (which reuse
+// one URL shape across many distinct searches).
+function isSkippable(url) {
+	if (!url) return true;
+	if (url.includes("://newtab")) return true;
+	if (url.includes("bing.com") && url.includes("search?")) return true;
+	return false;
+}
+
+function isIgnored(url) {
+	if (settings.ignoredWebsites.has(url)) return true;
+	const canonical = canonicalize(url);
+	return !!canonical && settings.ignoredWebsites.has(canonical);
+}
+
+function urlsMatch(a, b) {
+	if (a === b) return true;
+	if (settings.ignoreQueryStrings && stripQuery(a) === stripQuery(b)) return true;
+	if (settings.ignoreAnchorTags && stripAnchor(a) === stripAnchor(b)) return true;
+	return false;
+}
+
+/* --------------------------------------------------------------------------
+ * Tab map
+ * ------------------------------------------------------------------------ */
+
+async function ensureTabsMapInitialized() {
+	if (tabsMap.size > 0) return;
+	const existing = await chrome.tabs.query({});
+	tabsMap.clear();
+	for (const tab of existing) tabsMap.set(tab.id, tab);
+}
+
+function removeTabs(idOrIds) {
 	return new Promise(resolve => {
-		chrome.tabs.query({}, function (existingTabs) {
-			tabsMap.clear();
-			for (const tab of existingTabs) {
-				tabsMap.set(tab.id, tab);
-			}
+		chrome.tabs.remove(idOrIds, () => {
+			void chrome.runtime.lastError;
 			resolve();
 		});
+	});
+}
+
+function activateTab(id) {
+	return new Promise(resolve => {
+		chrome.tabs.update(id, { active: true }, () => {
+			void chrome.runtime.lastError;
+			resolve();
+		});
+	});
+}
+
+/* --------------------------------------------------------------------------
+ * Duplicate detection
+ *
+ * Every check runs through a single promise chain so two checks never overlap.
+ * Without this, two tabs that are duplicates of each other could each see the
+ * other and both get closed. Tabs we decide to close are removed from the map
+ * synchronously so a queued check won't treat them as live originals.
+ * ------------------------------------------------------------------------ */
+
+let checkChain = Promise.resolve();
+let scanTimer = null;
+
+function enqueue(task) {
+	checkChain = checkChain.then(task).catch(err => console.error("[Tabify]", err));
+	return checkChain;
+}
+
+// Coalesce bursts of events (e.g. session restore) into one full scan.
+function scheduleScan(delay = 150) {
+	if (scanTimer) clearTimeout(scanTimer);
+	scanTimer = setTimeout(() => {
+		scanTimer = null;
+		enqueue(() => checkAllDuplicates());
+	}, delay);
+}
+
+// Check a single freshly-loaded tab against everything else. Closes THIS tab
+// (the newer one) when it matches an existing tab, matching Tabify's contract
+// of "keep the tab you already had open".
+async function checkForDuplicate(tab) {
+	await settingsReady;
+	await ensureTabsMapInitialized();
+
+	if (!settings.extensionEnabled || !tab || !tab.url) return;
+	if (isSkippable(tab.url) || isIgnored(tab.url)) return;
+
+	let originalId = null;
+	for (const other of tabsMap.values()) {
+		if (other.id === tab.id || !other.url) continue;
+		if (urlsMatch(tab.url, other.url) || (tab.pendingUrl && other.url === tab.pendingUrl)) {
+			originalId = other.id;
+			break;
+		}
+	}
+
+	if (originalId === null) return;
+
+	tabsMap.delete(tab.id);
+	await removeTabs(tab.id);
+	if (settings.switchToOriginalTab) await activateTab(originalId);
+}
+
+// Single O(n) pass over all tabs, keeping the first occurrence of each URL and
+// closing later duplicates. `force` lets the "Close duplicates now" menu item
+// work even while the extension is toggled off.
+async function checkAllDuplicates(force = false) {
+	await settingsReady;
+	await ensureTabsMapInitialized();
+
+	if (!settings.extensionEnabled && !force) return;
+
+	const seenExact = new Map();
+	const seenQuery = new Map();
+	const seenAnchor = new Map();
+	const toRemove = [];
+	let switchTo = null;
+
+	for (const tab of tabsMap.values()) {
+		if (!tab.url || isSkippable(tab.url) || isIgnored(tab.url)) continue;
+
+		let originalId = null;
+		if (seenExact.has(tab.url)) {
+			originalId = seenExact.get(tab.url);
+		} else if (settings.ignoreQueryStrings && seenQuery.has(stripQuery(tab.url))) {
+			originalId = seenQuery.get(stripQuery(tab.url));
+		} else if (settings.ignoreAnchorTags && seenAnchor.has(stripAnchor(tab.url))) {
+			originalId = seenAnchor.get(stripAnchor(tab.url));
+		}
+
+		if (originalId !== null) {
+			toRemove.push(tab.id);
+			if (settings.switchToOriginalTab && switchTo === null) switchTo = originalId;
+		} else {
+			seenExact.set(tab.url, tab.id);
+			if (settings.ignoreQueryStrings) seenQuery.set(stripQuery(tab.url), tab.id);
+			if (settings.ignoreAnchorTags) seenAnchor.set(stripAnchor(tab.url), tab.id);
+		}
+	}
+
+	if (toRemove.length === 0) return;
+
+	for (const id of toRemove) tabsMap.delete(id);
+	await removeTabs(toRemove);
+	if (settings.switchToOriginalTab && switchTo !== null) await activateTab(switchTo);
+}
+
+/* --------------------------------------------------------------------------
+ * Tab lifecycle listeners
+ * ------------------------------------------------------------------------ */
+
+chrome.tabs.onCreated.addListener(tab => {
+	tabsMap.set(tab.id, tab);
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+	// Ignore noise: favicon/title updates and the "loading" phase.
+	if (changeInfo.favIconUrl || changeInfo.title) return;
+	if (changeInfo.status !== "complete") return;
+
+	tabsMap.set(tabId, tab);
+	// Always enqueue; checkForDuplicate awaits settingsReady and no-ops when the
+	// extension is off. Gating here would miss events fired before settings load
+	// on a fresh service-worker wake.
+	enqueue(() => checkForDuplicate(tab));
+});
+
+chrome.tabs.onRemoved.addListener(tabId => {
+	tabsMap.delete(tabId);
+});
+
+/* --------------------------------------------------------------------------
+ * Context menu
+ * ------------------------------------------------------------------------ */
+
+function ensureContextMenu() {
+	chrome.contextMenus.removeAll(() => {
+		void chrome.runtime.lastError;
+		chrome.contextMenus.create({
+			id: MENU_IGNORE,
+			title: "Ignore this site in Tabify",
+			contexts: ["page"],
+		}, () => void chrome.runtime.lastError);
+		chrome.contextMenus.create({
+			id: MENU_CLOSE_DUPES,
+			title: "Close duplicate tabs now",
+			contexts: ["page", "action"],
+		}, () => void chrome.runtime.lastError);
 	});
 }
 
 function getIgnored() {
-	return new Promise(resolve => {
-		chrome.storage.sync.get(["ignoredWebsites"], res =>
-			resolve(normalizeIgnoredWebsites(res.ignoredWebsites))
-		);
-	});
+	return chrome.storage.sync.get(["ignoredWebsites"])
+		.then(res => normalizeIgnoredWebsites(res.ignoredWebsites));
 }
 
-function setIgnored(next) {
-	return new Promise(resolve => {
-		const normalized = normalizeIgnoredWebsites(next);
-		chrome.storage.sync.set({ ignoredWebsites: normalized }, () => {
-			// Optional broadcast, but silences "Receiving end does not exist"
-			try {
-				chrome.runtime.sendMessage(
-					{ action: "updateCache", setting: "ignoreWebsite", value: normalized },
-					() => void chrome.runtime.lastError // read lastError to suppress warning
-				);
-			} catch (_) { /* ignore */ }
-			resolve();
-		});
-	});
+async function setIgnored(next) {
+	await chrome.storage.sync.set({ ignoredWebsites: normalizeIgnoredWebsites(next) });
 }
 
-// Refresh the menu title for a given URL
+// Reflect whether the current site is ignored in the menu label.
 async function refreshMenuTitleForUrl(rawUrl) {
 	const site = canonicalize(rawUrl);
-	if (!site) {
-		try {
-			chrome.contextMenus.update(MENU_ID, { title: "Ignore this site in Tabify" });
-			try { chrome.contextMenus.refresh(); } catch { } // Edge may not have refresh
-		} catch (error) {
-			console.warn("Failed to update context menu:", error);
-		}
-		return;
+	let title = "Ignore this site in Tabify";
+	if (site) {
+		const list = await getIgnored();
+		if (list.includes(site)) title = "Unignore this site in Tabify";
 	}
-
-	const list = await getIgnored();
-	const isIgnored = list.includes(site);
-
 	try {
-		chrome.contextMenus.update(MENU_ID, {
-			title: isIgnored ? "Unignore this site in Tabify" : "Ignore this site in Tabify"
-		});
-		try { chrome.contextMenus.refresh(); } catch { } // Edge may not have refresh
-	} catch (error) {
-		console.warn("Failed to update context menu:", error);
-	}
+		chrome.contextMenus.update(MENU_IGNORE, { title });
+		chrome.contextMenus.refresh?.();
+	} catch { /* menu may not exist yet */ }
 }
 
-// Prefer onShown when available; otherwise fall back to tab events
-if (chrome.contextMenus && chrome.contextMenus.onShown) {
+if (chrome.contextMenus.onShown) {
 	chrome.contextMenus.onShown.addListener((info, tab) => {
-		const url = info.pageUrl || tab?.url || "";
-		refreshMenuTitleForUrl(url);
+		refreshMenuTitleForUrl(info.pageUrl || tab?.url || "");
 	});
 } else {
-	// Edge fallback
+	// Edge fallback: keep the label fresh as the active tab changes.
 	chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 		try {
 			const tab = await chrome.tabs.get(tabId);
 			refreshMenuTitleForUrl(tab.url || "");
-		} catch { }
+		} catch { /* tab gone */ }
 	});
 	chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 		if (changeInfo.status === "complete" || changeInfo.url) {
-			refreshMenuTitleForUrl((tab && (tab.url || changeInfo.url)) || "");
+			refreshMenuTitleForUrl(tab?.url || changeInfo.url || "");
 		}
 	});
 }
 
-// Toggle on click
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-	if (info.menuItemId !== MENU_ID) return;
+	if (info.menuItemId === MENU_CLOSE_DUPES) {
+		enqueue(() => checkAllDuplicates(true));
+		return;
+	}
 
-	const url = info.pageUrl || tab?.url || "";
-	const site = canonicalize(url);
-	if (!site) return;
+	if (info.menuItemId === MENU_IGNORE) {
+		const site = canonicalize(info.pageUrl || tab?.url || "");
+		if (!site) return;
+		const list = await getIgnored();
+		const next = list.includes(site)
+			? list.filter(u => u !== site)
+			: [...list, site];
+		await setIgnored(next);
+		refreshMenuTitleForUrl(info.pageUrl || tab?.url || "");
+	}
+});
 
-	const list = await getIgnored();
-	const exists = list.includes(site);
-	const next = exists ? list.filter(u => u !== site) : Array.from(new Set([...list, site]));
-	await setIgnored(next);
-	refreshMenuTitleForUrl(url);
+/* --------------------------------------------------------------------------
+ * Install / startup
+ * ------------------------------------------------------------------------ */
+
+async function applyInstallDefaults() {
+	// Tabify should work the moment it's installed, so default it on. Only fill
+	// in keys that aren't set yet — never clobber an existing user's choices.
+	const current = await chrome.storage.sync.get(STORAGE_KEYS);
+	const defaults = {
+		extensionEnabled: true,
+		ignoreQueryStrings: false,
+		ignoreAnchorTags: false,
+		switchToOriginalTab: false,
+		ignoredWebsites: [],
+	};
+	const toSet = {};
+	for (const key of STORAGE_KEYS) {
+		if (current[key] === undefined) toSet[key] = defaults[key];
+	}
+	if (Object.keys(toSet).length) await chrome.storage.sync.set(toSet);
+}
+
+chrome.runtime.onInstalled.addListener(async details => {
+	ensureContextMenu();
+
+	if (details.reason === chrome.runtime.OnInstalledReason.INSTALL) {
+		await applyInstallDefaults();
+		settingsReady = loadSettings();
+		await settingsReady;
+		chrome.tabs.create({ url: "welcome.html" });
+	}
+
+	await settingsReady;
+	scheduleScan(1000);
+});
+
+chrome.runtime.onStartup.addListener(() => {
+	ensureContextMenu();
+	settingsReady = loadSettings();
+	// Give the browser a moment to restore the session before the first scan.
+	scheduleScan(10000);
 });

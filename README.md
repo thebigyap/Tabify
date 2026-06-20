@@ -23,15 +23,18 @@ Manual Installation
 
 ## Usage
 
--   Tabify automatically manages your tabs to prevent duplicate openings.
--   No additional configuration is needed; simply enjoy a cleaner browser experience.
--   You may change settings by clicking on the extension icon at any time.
+-   Tabify works the moment it's installed — it's on by default, so there's nothing to configure.
+-   Click the toolbar icon any time to open the settings menu (toggle protection, change matching rules, or exclude the current site).
+-   Right-click any page to ignore that site or run **Close duplicate tabs now** instantly.
+-   Manage your full exclusion list from **Excluded sites** in the menu.
 
 ## Features
 
--   Automatically removes duplicate tabs upon creation.
--   Helps keep your browser clutter-free and organized.
--   Multiple settings for tab removal, including a built in "ignored websites" manager.
+-   Automatically closes duplicate tabs and (optionally) jumps you back to the original.
+-   Smart matching: optionally treat links that differ only by query string (`?…`) or anchor (`#…`) as the same page.
+-   Per-site exclusions with a searchable manager, inline add, and one-tap Undo.
+-   Clean, intuitive menu that adapts to your system's light or dark appearance.
+-   Right-click shortcuts for ignoring a site or closing duplicates on demand.
 
 ## Development
 

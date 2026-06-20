@@ -1,138 +1,146 @@
-* {
-	color: white;
+/* Popup-specific layout. Shared components live in theme.css */
+
+.popup {
+	width: 360px;
+	padding: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
 }
 
-html, body {
-	width: 100%;
-	max-height: 100%;
-	margin: 0;
-	padding: 5px;
-	box-sizing: border-box;
+/* --- Header -------------------------------------------------------------- */
+
+.pop-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 8px;
 }
 
-.popup-container {
-	width: 350px;
-	background-color: #212226;
-	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+.pop-brand {
+	display: flex;
+	flex-direction: column;
+	line-height: 1.1;
 }
 
-.checkbox-container {
-	margin-bottom: 8px;
-	border: 1px solid #111;
-	background-color: #1c1c1e;
-	border-radius: 8px;
-	padding: 10px 12px;
+.pop-wordmark {
+	font-size: 28px;
 }
 
-label {
-	display: inline;
-	color: white;
-	margin-right: 15px;
-	cursor: pointer;
+.pop-tagline {
+	font-size: 12px;
+	color: var(--label-secondary);
+	margin-top: 2px;
 }
 
-input[type="checkbox"] {
-	margin-right: 5px;
+.pop-links {
+	display: flex;
+	gap: 8px;
 }
 
-label {
-	display: inline;
-	text-align: center;
-	vertical-align: middle;
+.icon-btn {
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	display: grid;
+	place-items: center;
+	background: var(--fill);
+	color: var(--label-secondary);
+	text-decoration: none;
+	transition: color 0.15s ease, background 0.15s ease, transform 0.06s ease;
 }
 
-.toggle-checkbox {
-	position: absolute;
-	appearance: none;
-	cursor: pointer;
-	min-width: 40px;
-	min-height: 20px;
-	background-color: #aaa;
-	border-radius: 20px;
-	margin-left: auto;
-	margin-right: auto;
-	margin-top: auto;
-	margin-bottom: auto;
+.icon-btn:hover {
+	color: var(--label);
 }
 
-.toggle-checkbox:focus-visible,
-button:focus-visible {
-	outline: 2px solid #3b82f6;
+.icon-btn:active {
+	transform: scale(0.94);
+}
+
+.icon-btn:focus-visible {
+	outline: 2px solid var(--accent);
 	outline-offset: 2px;
 }
 
-.toggle-checkbox:checked {
-	background-color: #4CAF50;
-}
+/* --- Rows ---------------------------------------------------------------- */
 
-.toggle-checkbox::before {
-	content: '';
-	position: absolute;
-	top: 2px;
-	left: 2px;
-	width: 16px;
-	height: 16px;
-	background-color: white;
-	border-radius: 50%;
-	transition: 0.3s;
-}
-
-.toggle-checkbox:checked::before {
-	transform: translateX(20px);
-}
-
-button {
-	border: none;
-	color: white;
-	padding: 8px 12px;
-	margin-bottom: 10px;
-	text-align: center;
-	text-decoration: none;
-	display: inline-block;
-	font-size: 14px;
-	font-weight: 600;
-	border-radius: 8px;
+/* The whole row is a label/button, so make it feel tappable. */
+.row {
 	cursor: pointer;
-	transition: all 0.2s ease;
-	box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+	user-select: none;
+	-webkit-user-select: none;
 }
 
-button:hover {
-	filter: brightness(1.1);
+.row-button {
+	width: 100%;
+	margin: 0;
+	font: inherit;
+	color: inherit;
+	text-align: left;
+	background: transparent;
+	border: none;
+	transition: background 0.15s ease;
 }
 
-button:active {
-	filter: brightness(0.9);
-	transform: translateY(1px);
-}
-.rainbow-text {
-	font-size: 36px;
-	font-family: Arial, Helvetica, sans-serif;
-	background: linear-gradient(90deg,
-			#ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #8f00ff,
-			#ff0000, #ff7f00, #ffff00);
-	background-size: 600% auto;
-	background-clip: text;
-	-webkit-background-clip: text;
-	color: transparent;
-	-webkit-text-fill-color: transparent;
-	animation: rainbowShift 6s linear infinite;
+.row-button:hover {
+	background: var(--fill);
 }
 
-@keyframes rainbowShift {
-	0% {
-		background-position: 0% 50%;
-	}
-
-	100% {
-		background-position: 100% 50%;
-	}
+.row-button:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
 }
 
-#ignoreWebsiteButton, #clearWebsitesButton {
-	background-color: #4CAF50;
+.row-trailing {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex: 0 0 auto;
+	color: var(--label-tertiary);
 }
 
-#manageWebsitesButton {
-	background-color: #8000ff;
+.count-badge {
+	min-width: 22px;
+	height: 22px;
+	padding: 0 7px;
+	border-radius: 11px;
+	background: var(--fill);
+	color: var(--label-secondary);
+	font-size: 12px;
+	font-weight: 600;
+	display: inline-grid;
+	place-items: center;
+}
+
+.site-favicon {
+	width: 18px;
+	height: 18px;
+	border-radius: 4px;
+}
+
+/* --- Disabled blocks (shown while Tabify is off) ------------------------- */
+
+.settings-block {
+	transition: opacity 0.2s ease;
+}
+
+.settings-block.is-disabled {
+	opacity: 0.45;
+}
+
+.settings-block.is-disabled .row {
+	cursor: default;
+}
+
+/* --- Footer -------------------------------------------------------------- */
+
+.pop-footer {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	color: var(--label-tertiary);
+	padding-top: 2px;
 }

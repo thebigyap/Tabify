@@ -4,128 +4,71 @@
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>Tabify - Manage Excluded Websites</title>
-	<style>
-		:root {
-			color-scheme: light dark;
-		}
-
-		body {
-			font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-			margin: 24px;
-		}
-
-		h1 {
-			margin: 0 0 16px;
-			font-size: 1.35rem;
-		}
-
-		h1.text-center {
-			text-align: center;
-			font-size: clamp(2rem, 3.5vw, 2.6rem);
-			line-height: 1.25;
-			margin: 0 0 20px;
-			font-weight: 700;
-		}
-
-		.toolbar {
-			display: flex;
-			gap: 8px;
-			align-items: center;
-			margin-bottom: 12px;
-			flex-wrap: wrap;
-		}
-
-		.btn {
-			padding: 8px 12px;
-			border-radius: 8px;
-			border: 1px solid #999;
-			background: transparent;
-			cursor: pointer;
-		}
-
-		.btn.primary {
-			border-color: #3b82f6;
-			color: #3b82f6;
-		}
-
-		.btn.danger {
-			border-color: #ed3f54;
-			color: #ed3f54;
-		}
-
-		.muted {
-			opacity: .7;
-		}
-
-		table {
-			width: 100%;
-			border-collapse: collapse;
-			border: 1px solid #ccc;
-			border-radius: 10px;
-			overflow: hidden;
-		}
-
-		thead th {
-			text-align: left;
-			font-weight: 600;
-			background: rgba(0, 0, 0, .05);
-			padding: 10px;
-		}
-
-		tbody td {
-			padding: 10px;
-			border-top: 1px solid #e5e5e5;
-			vertical-align: middle;
-		}
-
-		.title {
-			white-space: nowrap;
-		}
-
-		.url {
-			word-break: break-all;
-		}
-
-		.empty {
-			padding: 16px;
-			text-align: center;
-			opacity: .7;
-		}
-
-		.status {
-			margin-left: auto;
-			opacity: .8;
-		}
-	</style>
+	<title>Tabify — Excluded Sites</title>
+	<link rel="stylesheet" href="theme.css" />
+	<link rel="stylesheet" href="manage.css" />
 </head>
 
 <body>
-	<h1 class="text-center">Tabify - Excluded Websites</h1>
+	<main class="page">
+		<header class="page-header">
+			<span class="brand page-wordmark">Tabify</span>
+			<h1 class="page-title">Excluded sites</h1>
+			<p class="page-sub">Tabify won’t close duplicate tabs for the sites listed here.</p>
+		</header>
 
-	<div class="toolbar">
-		<button id="addBtn" class="btn primary">Ignore Website</button>
-		<button id="clearAllBtn" class="btn danger">Clear All</button>
-		<span id="countLabel" class="status">Loading…</span>
+		<div class="toolbar">
+			<div class="search">
+				<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+					stroke-linecap="round" stroke-linejoin="round">
+					<circle cx="11" cy="11" r="7" />
+					<path d="m20 20-3.5-3.5" />
+				</svg>
+				<input id="search" class="field search-input" type="search" placeholder="Search sites"
+					autocomplete="off" />
+			</div>
+			<button id="addBtn" class="btn btn-primary">
+				<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"
+					stroke-linecap="round" stroke-linejoin="round">
+					<path d="M12 5v14M5 12h14" />
+				</svg>
+				Add site
+			</button>
+		</div>
+
+		<form id="addForm" class="add-form" hidden>
+			<input id="addInput" class="field" type="text" placeholder="example.com" autocomplete="off"
+				spellcheck="false" />
+			<button type="submit" class="btn btn-primary">Add</button>
+			<button type="button" id="addCancel" class="btn btn-tinted">Cancel</button>
+			<span id="addError" class="add-error" role="alert"></span>
+		</form>
+
+		<section class="card list-card">
+			<div id="rows" class="group" role="list"></div>
+			<div id="empty" class="empty-state" hidden>
+				<svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.6"
+					stroke-linecap="round" stroke-linejoin="round">
+					<path d="M3 13h4l2 3h6l2-3h4" />
+					<path d="M5 13 7 5h10l2 8v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" />
+				</svg>
+				<p class="empty-title">No excluded sites</p>
+				<p class="empty-sub">Add a site above, or open Tabify on any page and turn on “Ignore this site”.</p>
+			</div>
+		</section>
+
+		<div class="page-footer">
+			<span id="countLabel" class="muted">Loading…</span>
+			<button id="clearAllBtn" class="btn btn-destructive">Clear all</button>
+		</div>
+	</main>
+
+	<div id="toast" class="toast" hidden>
+		<span id="toastMsg"></span>
+		<button id="toastUndo" class="toast-undo">Undo</button>
 	</div>
 
-	<table aria-label="Excluded websites">
-		<thead>
-			<tr>
-				<th style="width:56px">#</th>
-				<th style="width:220px">Title</th>
-				<th>URL</th>
-				<th style="width:160px">Actions</th>
-			</tr>
-		</thead>
-		<tbody id="rows">
-			<tr>
-				<td colspan="4" class="empty">Loading…</td>
-			</tr>
-		</tbody>
-	</table>
-
-	<script src="manage.js" defer></script>
+	<script src="manage.js"></script>
 </body>
 
 </html>

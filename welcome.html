@@ -1,34 +1,109 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-	<meta charset="UTF-8">
-	<title>Welcome to Tabify!</title>
-	<link rel="stylesheet" href="welcome.css">
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Welcome to Tabify</title>
+	<link rel="stylesheet" href="theme.css" />
+	<link rel="stylesheet" href="welcome.css" />
 </head>
 
 <body>
-	<h1>Welcome to Tabify</h1>
+	<main class="welcome">
+		<section class="hero">
+			<div class="app-badge">
+				<img src="assets/images/blue_happy_128.png" alt="Tabify" width="84" height="84" />
+			</div>
+			<h1 class="brand hero-title">Tabify</h1>
+			<p class="hero-tagline">One tab per page. Automatically.</p>
+			<span class="status-pill">
+				<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4"
+					stroke-linecap="round" stroke-linejoin="round">
+					<path d="m5 13 4 4L19 7" />
+				</svg>
+				Tabify is on and tidying your tabs
+			</span>
+		</section>
 
-	<p>Tabify is a browser extension that helps you declutter your workspace and manage your tabs effectively.</p>
+		<section class="features">
+			<article class="feature card">
+				<span class="feature-icon" style="background: var(--brand-1);">
+					<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round">
+						<rect x="9" y="9" width="11" height="11" rx="2" />
+						<path d="M5 15V6a1 1 0 0 1 1-1h9" />
+					</svg>
+				</span>
+				<h3>No more duplicates</h3>
+				<p>Open a link you already have somewhere and Tabify quietly closes the copy.</p>
+			</article>
 
-	<h2>Features:</h2>
-	<ul>
-		<li>Preventing duplicate tabs</li>
-		<li>Ability to ignore search parameters when considering tabs 'duplicate'</li>
-		<li>Ability to ignore anchor tags when considering tabs 'duplicate'</li>
-		<li>Workspace management</li>
-	</ul>
+			<article class="feature card">
+				<span class="feature-icon" style="background: #af52de;">
+					<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round">
+						<path d="M3 5h18l-7 8v5l-4-2v-3z" />
+					</svg>
+				</span>
+				<h3>Smart matching</h3>
+				<p>Optionally ignore “?tracking” and “#section” bits so near-identical links count as one.</p>
+			</article>
 
-	<h2>Get Involved</h2>
-	<p>Tabify is an open-source project hosted on GitHub. You can find the source code on the extension's <a
-			href="https://github.com/WillMartin03/Tabify">GitHub Repository</a>.</p>
-	<p>Contributions are welcomed and appreciated. Feel free to submit pull requests or open issues on the GitHub
-		repository.<br>Feel free to help make changes to the repo, mess around with the design, and help me improve!</p>
+			<article class="feature card">
+				<span class="feature-icon" style="background: #ff9500;">
+					<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round">
+						<path d="M9 14 4 9l5-5" />
+						<path d="M4 9h11a5 5 0 0 1 0 10h-3" />
+					</svg>
+				</span>
+				<h3>Keep your place</h3>
+				<p>Jump back to the tab you already had open instead of losing your spot.</p>
+			</article>
 
-	<h2>Donations</h2>
-	<p>If you find Tabify useful, consider supporting the project by making a donation. Your contribution will help us
-		continue to improve and maintain the extension.</p>
+			<article class="feature card">
+				<span class="feature-icon" style="background: var(--brand-3);">
+					<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+						stroke-linecap="round" stroke-linejoin="round">
+						<path d="M8 6h12M8 12h12M8 18h12" />
+						<circle cx="3.6" cy="6" r="1.1" fill="currentColor" stroke="none" />
+						<circle cx="3.6" cy="12" r="1.1" fill="currentColor" stroke="none" />
+						<circle cx="3.6" cy="18" r="1.1" fill="currentColor" stroke="none" />
+					</svg>
+				</span>
+				<h3>Your exceptions</h3>
+				<p>Keep duplicates where you want them with a simple per-site allow list.</p>
+			</article>
+		</section>
+
+		<section class="how card">
+			<h2>Getting started</h2>
+			<ol class="steps">
+				<li><span><strong>Click the Tabify icon</strong> in your toolbar to open settings and fine-tune how
+						matching works.</span></li>
+				<li><span><strong>Right-click any page</strong> to ignore that site or close duplicate tabs
+						instantly.</span></li>
+				<li><span><strong>That’s it.</strong> Tabify runs quietly in the background — no setup
+						required.</span></li>
+			</ol>
+		</section>
+
+		<section class="cta">
+			<a class="btn btn-primary" href="manage.html">Manage excluded sites</a>
+			<a class="btn btn-tinted" href="https://github.com/thebigyap/Tabify" target="_blank"
+				rel="noopener noreferrer">Star on GitHub</a>
+			<a class="btn btn-tinted" href="https://buymeacoffee.com/bigyap" target="_blank"
+				rel="noopener noreferrer">Buy me a coffee</a>
+		</section>
+
+		<footer class="welcome-footer">
+			<span>Tip: pin Tabify to your toolbar for one-click access.</span>
+			<span id="welcomeVersion"></span>
+		</footer>
+	</main>
+
+	<script src="welcome.js"></script>
 </body>
 
 </html>

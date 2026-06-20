@@ -1,9 +1,9 @@
 {
 	"manifest_version": 3,
 	"name": "Tabify",
-	"description": "Checks site URLs of websites to prevent opening the same link twice. Closes duplicate tabs and selects the old tab instead.",
-	"author": "William Martin",
-	"version": "2.1.5",
+	"description": "Stop duplicate tabs before they pile up. Tabify closes copies of pages you already have open and can jump you back to the original.",
+	"author": "bigyap",
+	"version": "3.0.0",
 	"icons": {
 		"16": "/assets/images/blue_happy_16.png",
 		"48": "/assets/images/blue_happy_48.png",
