@@ -400,7 +400,7 @@ async function applyInstallDefaults() {
 		extensionEnabled: true,
 		ignoreQueryStrings: false,
 		ignoreAnchorTags: false,
-		switchToOriginalTab: false,
+		switchToOriginalTab: true,
 		ignoredWebsites: [],
 	};
 	const toSet = {};
