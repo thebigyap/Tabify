@@ -18,9 +18,6 @@ const STORAGE_KEYS = [
 const ICON_ENABLED = "assets/images/blue_happy_128.png";
 const ICON_DISABLED = "assets/images/disabled_sad_128.png";
 
-const MENU_IGNORE = "tabify-toggle-ignore";
-const MENU_CLOSE_DUPES = "tabify-close-duplicates";
-
 /** In-memory mirror of every open tab, keyed by tab id. Rebuilt on demand. */
 const tabsMap = new Map();
 
@@ -241,13 +238,12 @@ async function checkForDuplicate(tab) {
 }
 
 // Single O(n) pass over all tabs, keeping the first occurrence of each URL and
-// closing later duplicates. `force` lets the "Close duplicates now" menu item
-// work even while the extension is toggled off.
-async function checkAllDuplicates(force = false) {
+// closing later duplicates.
+async function checkAllDuplicates() {
 	await settingsReady;
 	await ensureTabsMapInitialized();
 
-	if (!settings.extensionEnabled && !force) return;
+	if (!settings.extensionEnabled) return;
 
 	const seenExact = new Map();
 	const seenQuery = new Map();
@@ -309,86 +305,6 @@ chrome.tabs.onRemoved.addListener(tabId => {
 });
 
 /* --------------------------------------------------------------------------
- * Context menu
- * ------------------------------------------------------------------------ */
-
-function ensureContextMenu() {
-	chrome.contextMenus.removeAll(() => {
-		void chrome.runtime.lastError;
-		chrome.contextMenus.create({
-			id: MENU_IGNORE,
-			title: "Ignore this site in Tabify",
-			contexts: ["page"],
-		}, () => void chrome.runtime.lastError);
-		chrome.contextMenus.create({
-			id: MENU_CLOSE_DUPES,
-			title: "Close duplicate tabs now",
-			contexts: ["page", "action"],
-		}, () => void chrome.runtime.lastError);
-	});
-}
-
-function getIgnored() {
-	return chrome.storage.sync.get(["ignoredWebsites"])
-		.then(res => normalizeIgnoredWebsites(res.ignoredWebsites));
-}
-
-async function setIgnored(next) {
-	await chrome.storage.sync.set({ ignoredWebsites: normalizeIgnoredWebsites(next) });
-}
-
-// Reflect whether the current site is ignored in the menu label.
-async function refreshMenuTitleForUrl(rawUrl) {
-	const site = canonicalize(rawUrl);
-	let title = "Ignore this site in Tabify";
-	if (site) {
-		const list = await getIgnored();
-		if (list.includes(site)) title = "Unignore this site in Tabify";
-	}
-	try {
-		chrome.contextMenus.update(MENU_IGNORE, { title });
-		chrome.contextMenus.refresh?.();
-	} catch { /* menu may not exist yet */ }
-}
-
-if (chrome.contextMenus.onShown) {
-	chrome.contextMenus.onShown.addListener((info, tab) => {
-		refreshMenuTitleForUrl(info.pageUrl || tab?.url || "");
-	});
-} else {
-	// Edge fallback: keep the label fresh as the active tab changes.
-	chrome.tabs.onActivated.addListener(async ({ tabId }) => {
-		try {
-			const tab = await chrome.tabs.get(tabId);
-			refreshMenuTitleForUrl(tab.url || "");
-		} catch { /* tab gone */ }
-	});
-	chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-		if (changeInfo.status === "complete" || changeInfo.url) {
-			refreshMenuTitleForUrl(tab?.url || changeInfo.url || "");
-		}
-	});
-}
-
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-	if (info.menuItemId === MENU_CLOSE_DUPES) {
-		enqueue(() => checkAllDuplicates(true));
-		return;
-	}
-
-	if (info.menuItemId === MENU_IGNORE) {
-		const site = canonicalize(info.pageUrl || tab?.url || "");
-		if (!site) return;
-		const list = await getIgnored();
-		const next = list.includes(site)
-			? list.filter(u => u !== site)
-			: [...list, site];
-		await setIgnored(next);
-		refreshMenuTitleForUrl(info.pageUrl || tab?.url || "");
-	}
-});
-
-/* --------------------------------------------------------------------------
  * Install / startup
  * ------------------------------------------------------------------------ */
 
@@ -411,8 +327,6 @@ async function applyInstallDefaults() {
 }
 
 chrome.runtime.onInstalled.addListener(async details => {
-	ensureContextMenu();
-
 	if (details.reason === chrome.runtime.OnInstalledReason.INSTALL) {
 		await applyInstallDefaults();
 		settingsReady = loadSettings();
@@ -425,7 +339,6 @@ chrome.runtime.onInstalled.addListener(async details => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-	ensureContextMenu();
 	settingsReady = loadSettings();
 	// Give the browser a moment to restore the session before the first scan.
 	scheduleScan(10000);

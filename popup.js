@@ -186,7 +186,7 @@ function wireEvents() {
 		window.close();
 	});
 
-	// Stay in sync if settings change elsewhere (manage page, context menu).
+	// Stay in sync if settings change elsewhere (e.g. the manage page).
 	chrome.storage.onChanged.addListener((changes, area) => {
 		if (area !== "sync") return;
 

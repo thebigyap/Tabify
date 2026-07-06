@@ -3,7 +3,7 @@
 	"name": "Tabify",
 	"description": "Stop duplicate tabs before they pile up. Tabify closes copies of pages you already have open and can jump you back to the original.",
 	"author": "bigyap",
-	"version": "3.0.1",
+	"version": "3.0.2",
 	"icons": {
 		"16": "/assets/images/blue_happy_16.png",
 		"48": "/assets/images/blue_happy_48.png",
@@ -18,7 +18,7 @@
 			"128": "/assets/images/blue_happy_128.png"
 		}
 	},
-	"permissions": ["storage", "tabs", "activeTab", "contextMenus"],
+	"permissions": ["storage", "tabs", "activeTab"],
 	"host_permissions": ["http://*/*", "https://*/*"],
 	"background": {
 		"service_worker": "background.js"

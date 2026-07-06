@@ -36,17 +36,9 @@ sent anywhere.
 
 The activeTab permission lets Tabify read the URL of the current tab when the user
 interacts with the extension — for example, when they click "Ignore this site" in
-the popup or use the right-click menu on the current page. This allows the extension
-to add the exact site the user is currently viewing to their exclusion list without
-requiring broad, persistent access driven by user action.
-
-### `contextMenus`
-
-Tabify adds right-click menu items so users can manage duplicate prevention directly
-from any page. The menu provides a quick "Ignore/Unignore this site" toggle for
-adding or removing the current site from the exclusion list, and a "Close duplicate
-tabs now" action to clean up existing duplicates on demand. The contextMenus
-permission is required to create and update these menu entries.
+the popup. This allows the extension to add the exact site the user is currently
+viewing to their exclusion list without requiring broad, persistent access driven
+by user action.
 
 ### Host permissions (`http://*/*`, `https://*/*`)
 
