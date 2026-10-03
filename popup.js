@@ -1,4 +1,4 @@
-/* Tabify popup — a thin settings editor.
+/* Tabify popup - a thin settings editor.
    It only reads/writes chrome.storage; the background worker reacts to those
    changes (updating the icon and re-scanning tabs), so no messaging is needed. */
 
@@ -11,7 +11,7 @@ let globeIcon = "";     // default globe markup, kept so we can restore it
 function getSettings(keys) { return chrome.storage.sync.get(keys); }
 function setSettings(obj) { return chrome.storage.sync.set(obj); }
 
-// Origin-level canonicalization — must mirror background.js / manage.js.
+// Origin-level canonicalization - must mirror background.js / manage.js.
 function canonicalize(raw) {
 	if (!raw) return null;
 	try {

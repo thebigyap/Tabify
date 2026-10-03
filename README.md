@@ -23,7 +23,7 @@ Manual Installation
 
 ## Usage
 
--   Tabify works the moment it's installed — it's on by default, so there's nothing to configure.
+-   Tabify works the moment it's installed - it's on by default, so there's nothing to configure.
 -   Click the toolbar icon any time to open the settings menu (toggle protection, change matching rules, or exclude the current site).
 -   Manage your full exclusion list from **Excluded sites** in the menu.
 

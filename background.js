@@ -1,5 +1,5 @@
 /**
- * Tabify — background service worker
+ * Tabify - background service worker
  *
  * Keeps a single tab per page by detecting duplicates and closing the newest one
  * (optionally jumping to the original). Designed for Manifest V3, where the
@@ -310,7 +310,7 @@ chrome.tabs.onRemoved.addListener(tabId => {
 
 async function applyInstallDefaults() {
 	// Tabify should work the moment it's installed, so default it on. Only fill
-	// in keys that aren't set yet — never clobber an existing user's choices.
+	// in keys that aren't set yet - never clobber an existing user's choices.
 	const current = await chrome.storage.sync.get(STORAGE_KEYS);
 	const defaults = {
 		extensionEnabled: true,

@@ -1,4 +1,4 @@
-# Tabify — Store Listing & Permission Justifications
+# Tabify - Store Listing & Permission Justifications
 
 Reference copy of the answers used for the Chrome Web Store / Edge Add-ons
 developer submission. Keep this in sync with `manifest.json` whenever
@@ -9,7 +9,7 @@ permissions change.
 Tabify has one purpose: to prevent duplicate browser tabs. When you open a page
 that is already open in another tab, Tabify closes the duplicate and (optionally)
 switches you back to the original tab, keeping your tab strip clean. Every feature
-in the extension — its settings, matching rules, and per-site exclusions — exists
+in the extension - its settings, matching rules, and per-site exclusions - exists
 solely to support this single duplicate-prevention function.
 
 ## Permission justifications
@@ -35,7 +35,7 @@ sent anywhere.
 ### `activeTab`
 
 The activeTab permission lets Tabify read the URL of the current tab when the user
-interacts with the extension — for example, when they click "Ignore this site" in
+interacts with the extension - for example, when they click "Ignore this site" in
 the popup. This allows the extension to add the exact site the user is currently
 viewing to their exclusion list without requiring broad, persistent access driven
 by user action.

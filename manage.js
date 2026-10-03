@@ -1,6 +1,6 @@
-/* Tabify — Manage excluded sites.
+/* Tabify - Manage excluded sites.
    Writes to chrome.storage.sync; the background worker reacts on its own.
-   No native prompt()/alert()/confirm() — everything is inline, with Undo. */
+   No native prompt()/alert()/confirm() - everything is inline, with Undo. */
 
 const state = { list: [], filter: "" };
 let undoTimer = null;
@@ -63,7 +63,7 @@ function monogram(url) {
 	return (core[0] || "?").toUpperCase();
 }
 
-// Deterministic, pleasant color per domain — no network favicon lookups.
+// Deterministic, pleasant color per domain - no network favicon lookups.
 function colorFor(url) {
 	const s = hostLabel(url);
 	let h = 0;

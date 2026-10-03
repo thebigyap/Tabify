@@ -1,4 +1,4 @@
-/* Tabify welcome screen — just stamps the current version. */
+/* Tabify welcome screen - just stamps the current version. */
 document.addEventListener("DOMContentLoaded", () => {
 	const el = document.getElementById("welcomeVersion");
 	if (el && chrome?.runtime?.getManifest) {
